@@ -7,6 +7,7 @@ mới: `docs/adr/NNNN-<slug-ngắn>.md`.
 | # | Tên | Trạng thái | Ngày |
 |---|---|---|---|
 | — | [Migrate admin từ AdminJS sang admin REST + portal exe-admin](<API_REPO>/docs/ADR-admin-api-migration.md) | Chấp nhận | 2026-07-03 |
+| 0001 | [Dùng `learning_events` làm nguồn sự thật duy nhất cho tiến độ học tập](0001-learning-events-as-progress-source.md) | Đề xuất | 2026-07-14 |
 
 > ⚠️ Link ở bảng trên dùng placeholder `<API_REPO>` (xem `docs/cross-repo-linking.md`) — **không phải link bấm
 > được**, vì từ ngày 2026-07-14 file này nằm ở repo `exe-api`, khác repo với `docs/adr/` (nay ở `studee-workspace`).
