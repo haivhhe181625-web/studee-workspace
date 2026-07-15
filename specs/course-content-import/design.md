@@ -150,9 +150,13 @@ Xử lý **đồng bộ** trong request (Q6). Vài giây cho file ≤5MB.
 
 ## 5. Contracts
 
-- `contracts/admin-course-import.md` — **Cross-repo (api↔admin)**: endpoint upload `.xlsx` + shape response
-  thành công/lỗi. Ranh giới cross-repo duy nhất (learner `web` ngoài phạm vi). Bắt buộc viết trước khi generate
-  tasks.
+- `contracts/admin-course-import.md` — **Cross-repo (api↔admin)**: hợp đồng API đầy đủ của bề mặt admin course
+  content. Gồm **§1 `POST /_/import`** (Phase 1 — đã chốt) + **§2 template / §3 list / §4 detail / §5 delete**
+  (Tech Lead **đề xuất nâng từ Phase 2 lên Phase 1** để feature dùng được thực tế + đóng lỗ hổng re-import của Q4 —
+  chờ Technical Review chốt). Ranh giới cross-repo duy nhất của Phase 1 (learner `web` là api↔web, Phase 2).
+- **[Cần chốt ở Technical Review]** Có nâng §2–§5 vào Phase 1 không (chi phí thấp: list/get/delete sinh từ
+  `_crud.factory.js`; template là 1 GET nhỏ) — xem contract §0.3. Nếu duyệt → thêm task tương ứng vào `tasks.md`
+  và hằng `COURSECONTENT_DELETE` vào `permissions.js`.
 - Đọc chéo `ipa`/`talk` là **cùng service `api`, cùng repo** → không phải ranh giới cross-service → §3.3 là đủ,
   không cần file contract riêng. (Không đụng `llm`/`cat`.)
 
