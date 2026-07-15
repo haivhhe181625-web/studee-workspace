@@ -28,10 +28,12 @@ Content-Type: multipart/form-data
 | `file` | file `.xlsx` (binary) | ✓ | File Excel cấu trúc khóa học theo template chuẩn. Mime: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Giới hạn **5MB** (Q6). |
 
 - **KHÔNG** nhận `centerId` từ form — Phase 1 nội dung dùng chung, `centerId = null` phía server (Q5).
-- Cấu trúc file Excel theo `<API_REPO>/docs/content_ingestion_schema.md` (cột `Level` dẫn dắt:
-  ROADMAP/PHASE/MODULE/LESSON/EXERCISE). **Khác biệt Phase 1:** dòng `EXERCISE` mang **ID/mã bài tập tham chiếu**
-  (`ipa` = mã IPA lesson đã publish; `talk` = scenario id) + `type ∈ {ipa, talk}`. `quiz` **chưa hỗ trợ** (Phase
-  2). Template chuẩn `.xlsx` chốt với đội học thuật ở giai đoạn tasks.
+- Cấu trúc file Excel: cột `Level` dẫn dắt (ROADMAP/PHASE/MODULE/LESSON/EXERCISE). **Cột (mở rộng Hướng B):**
+  `A Level | B Key | C Title | D Type | E RefId | F CefrFrom | G CefrTo | H Category | I Content(desc/theory) |
+  J VideoUrl | K AudioUrl | L Note`. Mỗi dòng chỉ điền ô liên quan tới `Level` của nó (xem `design.md` §3.2).
+- Dòng `EXERCISE` mang **ID/mã bài tập tham chiếu** (`ipa`=mã IPA lesson đã publish; `talk`=scenario id) +
+  `type ∈ {ipa, talk}`; `quiz` **chưa hỗ trợ** (Phase 2). Bài học có thể chỉ có lý thuyết/video/audio (không
+  EXERCISE). Template chuẩn `.xlsx` chốt với đội học thuật ở giai đoạn tasks.
 
 ## Response — thành công
 
@@ -89,7 +91,7 @@ dùng HTTP 400** (quyết định PO + convention repo không dùng 422); phân 
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `EMPTY_CHILDREN` |
+| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` |
 | `message` | String | Mô tả tiếng Việt, kèm số dòng |
 | `row` | Number | Số dòng Excel để đội học thuật tự sửa |
 | `refType` / `refId` | String | Chỉ có với lỗi tham chiếu (AC-3/AC-E6) |

@@ -141,11 +141,12 @@ const validDoc = (extra = {}) => ({
   status: 'ready',
   importedBy: oid(),
   phases: [{
-    key: 'p1', title: 'Chặng 1', order: 1,
+    key: 'p1', title: 'Chặng 1', order: 1, cefrFrom: 'A2', cefrTo: 'B1', goalNote: 'IELTS 5.0→6.0',
     modules: [{
-      key: 'm1', title: 'Chuyên đề 1', order: 1,
+      key: 'm1', title: 'Ngữ pháp', order: 1, category: 'grammar',
       lessons: [{
         key: 'l1', title: 'Bài 1', order: 1,
+        theory: '# Thì hiện tại', videoUrl: 'https://cdn.x/v.mp4', audioUrl: 'https://cdn.x/a.mp3',
         exercises: [{ type: 'ipa', refId: 'L1', order: 1 }],
       }],
     }],
@@ -157,12 +158,31 @@ beforeAll(async () => { await connectDb(); await CourseStructure.init(); });
 afterEach(clearDb);
 afterAll(disconnectDb);
 
-test('tạo document hợp lệ với cây nhúng', async () => {
+test('tạo document hợp lệ với cây nhúng + field Hướng B', async () => {
   const doc = await CourseStructure.create(validDoc());
   expect(doc.slug).toBe('khoa-a2');
   expect(doc.centerId).toBeNull();
   expect(doc.status).toBe('ready');
-  expect(doc.phases[0].modules[0].lessons[0].exercises[0].type).toBe('ipa');
+  expect(doc.phases[0].cefrFrom).toBe('A2');
+  expect(doc.phases[0].cefrTo).toBe('B1');
+  expect(doc.phases[0].modules[0].category).toBe('grammar');
+  const l = doc.phases[0].modules[0].lessons[0];
+  expect(l.theory).toContain('Thì hiện tại');
+  expect(l.videoUrl).toBe('https://cdn.x/v.mp4');
+  expect(l.exercises[0].type).toBe('ipa');
+});
+
+test('Bài học chỉ lý thuyết (không exercises) — model chấp nhận', async () => {
+  const d = validDoc();
+  d.phases[0].modules[0].lessons[0].exercises = [];
+  const doc = await CourseStructure.create(d);
+  expect(doc.phases[0].modules[0].lessons[0].exercises).toHaveLength(0);
+});
+
+test('category ngoài enum → ValidationError', async () => {
+  const d = validDoc();
+  d.phases[0].modules[0].category = 'unknown-cat';
+  await expect(CourseStructure.create(d)).rejects.toThrow(/validation/i);
 });
 
 test('thiếu title → ValidationError', async () => {
@@ -206,6 +226,8 @@ Tạo `services/api/src/modules/course-content/course-content.model.js`:
 const { Schema, model } = require('mongoose');
 
 const EXERCISE_TYPES = ['ipa', 'talk']; // quiz hoãn Phase 2 (Q-Quiz)
+const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const MODULE_CATEGORIES = ['grammar', 'pronunciation', 'vocabulary', 'listening', 'reading', 'writing', 'speaking', 'other'];
 
 const ExerciseRefSchema = new Schema(
   {
@@ -222,7 +244,13 @@ const LessonSchema = new Schema(
     key: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
     order: { type: Number, required: true },
-    exercises: { type: [ExerciseRefSchema], required: true },
+    // Hướng B — multi-modal content. Media are URLs (team self-hosts), not uploaded here.
+    theory: { type: String, default: '' }, // markdown
+    videoUrl: { type: String, default: null },
+    audioUrl: { type: String, default: null },
+    // NOT required: a theory-only lesson (no exercise) is valid. The "at least one of
+    // {theory,video,audio,exercise}" rule is enforced in the service (EMPTY_LESSON).
+    exercises: { type: [ExerciseRefSchema], default: [] },
   },
   { _id: false }
 );
@@ -232,6 +260,7 @@ const ModuleSchema = new Schema(
     key: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
     order: { type: Number, required: true },
+    category: { type: String, enum: MODULE_CATEGORIES, default: 'other' }, // Hướng B
     lessons: { type: [LessonSchema], required: true },
   },
   { _id: false }
@@ -242,6 +271,10 @@ const PhaseSchema = new Schema(
     key: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
     order: { type: Number, required: true },
+    // Hướng B — level progression (A2→B1) or a free-text goal ("IELTS 5.0→6.0").
+    cefrFrom: { type: String, enum: [...CEFR_LEVELS, null], default: null },
+    cefrTo: { type: String, enum: [...CEFR_LEVELS, null], default: null },
+    goalNote: { type: String, default: null },
     modules: { type: [ModuleSchema], required: true },
   },
   { _id: false }
@@ -274,7 +307,7 @@ const CourseStructureSchema = new Schema(
 
 const CourseStructure = model('CourseStructure', CourseStructureSchema);
 
-module.exports = { CourseStructure, EXERCISE_TYPES };
+module.exports = { CourseStructure, EXERCISE_TYPES, CEFR_LEVELS, MODULE_CATEGORIES };
 ```
 
 - [ ] **Step 4: Chạy test — xác nhận PASS**
@@ -283,7 +316,7 @@ Run:
 ```bash
 cd services/api && npx jest course-content.model -i
 ```
-Expected: 4 test PASS.
+Expected: 6 test PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -312,54 +345,55 @@ const ExcelJS = require('exceljs');
 const { parseXlsx } = require('../modules/course-content/course-content.parser');
 const ApiError = require('../utils/apiError');
 
-// rows: mảng [Level, Key, Title, Type, RefId]
+// Cột: A Level | B Key | C Title | D Type | E RefId | F CefrFrom | G CefrTo | H Category | I Content | J VideoUrl | K AudioUrl | L Note
+const HEADER = ['Level', 'Key', 'Title', 'Type', 'RefId', 'CefrFrom', 'CefrTo', 'Category', 'Content', 'VideoUrl', 'AudioUrl', 'Note'];
 async function xlsx(rows) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Course');
-  ws.addRow(['Level', 'Key', 'Title', 'Type', 'RefId']); // header (dòng 1)
+  ws.addRow(HEADER); // header (dòng 1)
   rows.forEach((r) => ws.addRow(r));
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 const HAPPY = [
-  ['ROADMAP', 'khoa-a2', 'Khóa A2', '', ''],       // dòng 2
-  ['PHASE', 'p1', 'Chặng 1', '', ''],              // dòng 3
-  ['MODULE', 'm1', 'Chuyên đề 1', '', ''],         // dòng 4
-  ['LESSON', 'l1', 'Bài 1', '', ''],               // dòng 5
-  ['EXERCISE', '', '', 'ipa', 'L1'],               // dòng 6
-  ['EXERCISE', '', '', 'talk', 'travel'],          // dòng 7
+  // Level      Key       Title      Type   RefId    CefrFrom CefrTo Category   Content            Video               Audio               Note
+  ['ROADMAP', 'khoa-a2', 'Khóa A2', '', '', '', '', '', 'Giới thiệu khóa', '', '', ''],                 // dòng 2
+  ['PHASE', 'p1', 'Chặng 1', '', '', 'A2', 'B1', '', '', '', '', 'IELTS 5.0→6.0'],                       // dòng 3
+  ['MODULE', 'm1', 'Ngữ pháp', '', '', '', '', 'grammar', '', '', '', ''],                               // dòng 4
+  ['LESSON', 'l1', 'Bài 1', '', '', '', '', '', '# Lý thuyết', 'https://cdn.x/v.mp4', 'https://cdn.x/a.mp3', ''], // dòng 5
+  ['EXERCISE', '', '', 'ipa', 'L1', '', '', '', '', '', '', ''],                                         // dòng 6
+  ['EXERCISE', '', '', 'talk', 'travel', '', '', '', '', '', '', ''],                                    // dòng 7
 ];
 
-test('parse cây hợp lệ → IR đúng + số dòng', async () => {
-  const { course, errors } = parseXlsx(await xlsx(HAPPY));
+test('parse cây hợp lệ → IR đúng + field Hướng B + số dòng', async () => {
+  const { course, errors } = await parseXlsx(await xlsx(HAPPY));
   expect(errors).toEqual([]);
-  expect(course.slug).toBe('khoa-a2');
-  expect(course.row).toBe(2);
+  expect(course).toMatchObject({ slug: 'khoa-a2', row: 2, description: 'Giới thiệu khóa' });
+  const phase = course.phases[0];
+  expect(phase).toMatchObject({ cefrFrom: 'A2', cefrTo: 'B1', goalNote: 'IELTS 5.0→6.0' });
+  expect(course.phases[0].modules[0].category).toBe('grammar');
   const lesson = course.phases[0].modules[0].lessons[0];
-  expect(lesson.key).toBe('l1');
+  expect(lesson).toMatchObject({ key: 'l1', theory: '# Lý thuyết', videoUrl: 'https://cdn.x/v.mp4', audioUrl: 'https://cdn.x/a.mp3' });
   expect(lesson.exercises).toHaveLength(2);
   expect(lesson.exercises[1]).toMatchObject({ type: 'talk', refId: 'travel', row: 7 });
 });
 
-test('file không phải xlsx / hỏng → ApiError PARSE_FAILED', () => {
-  expect(() => parseXlsx(Buffer.from('not an excel file'))).toThrow(ApiError);
-  try { parseXlsx(Buffer.from('nope')); } catch (e) { expect(e.code).toBe('PARSE_FAILED'); }
+test('file không phải xlsx / hỏng → ApiError PARSE_FAILED', async () => {
+  await expect(parseXlsx(Buffer.from('not an excel file'))).rejects.toMatchObject({ code: 'PARSE_FAILED' });
 });
 
 test('file rỗng (chỉ header) → ApiError EMPTY_COURSE_FILE', async () => {
-  try { parseXlsx(await xlsx([])); } catch (e) { expect(e.code).toBe('EMPTY_COURSE_FILE'); }
+  await expect(parseXlsx(await xlsx([]))).rejects.toMatchObject({ code: 'EMPTY_COURSE_FILE' });
 });
 
 test('PHASE trước ROADMAP → lỗi ORPHAN_NODE trong errors[]', async () => {
-  const { errors } = parseXlsx(await xlsx([['PHASE', 'p1', 'Chặng lạc', '', '']]));
+  const { errors } = await parseXlsx(await xlsx([['PHASE', 'p1', 'Chặng lạc', '', '', '', '', '', '', '', '', '']]));
   expect(errors.some((e) => e.code === 'ORPHAN_NODE' && e.row === 2)).toBe(true);
 });
 ```
 
-> `parseXlsx` là **đồng bộ** trong test này — nhưng `exceljs` load là async. Để giữ API đồng bộ dễ dùng, Step 3
-> dùng `xlsx.load` bọc trong hàm async và parser thực chất **async**. Điều chỉnh test: đổi các call thành `await`
-> và `.rejects`. (Xem Step 3 — parser export `async function parseXlsx`. Cập nhật test cho khớp: bọc assertion lỗi
-> bằng `await expect(parseXlsx(bad)).rejects.toThrow(...)`.)
+> `ApiError` vẫn được import ở đầu file test (dùng cho `instanceof` nếu cần) — các assertion lỗi trên đối chiếu
+> `code` qua `.rejects.toMatchObject`.
 
 - [ ] **Step 2: Chạy test — xác nhận FAIL**
 
@@ -420,6 +454,7 @@ async function parseXlsx(buffer) {
     const title = cell(row, 3);
     const type = cell(row, 4).toLowerCase();
     const refId = cell(row, 5);
+    const nz = (i) => cell(row, i) || null; // '' → null (F/G/H/J/K/L)
 
     if (!LEVELS.has(level)) {
       errors.push({ code: 'MISSING_LEVEL', message: `Dòng ${rowNumber}: Level '${level}' không hợp lệ`, row: rowNumber });
@@ -427,21 +462,30 @@ async function parseXlsx(buffer) {
     }
 
     if (level === 'ROADMAP') {
-      course = { slug: key, title, description: '', row: rowNumber, phases: [] };
+      course = { slug: key, title, description: cell(row, 9), row: rowNumber, phases: [] };
       curPhase = curModule = curLesson = null;
     } else if (level === 'PHASE') {
       if (!course) { errors.push(orphan(rowNumber, 'PHASE', 'ROADMAP')); return; }
-      curPhase = { key, title, order: course.phases.length + 1, row: rowNumber, modules: [] };
+      curPhase = {
+        key, title, order: course.phases.length + 1, row: rowNumber,
+        cefrFrom: nz(6), cefrTo: nz(7), goalNote: nz(12), modules: [],
+      };
       course.phases.push(curPhase);
       curModule = curLesson = null;
     } else if (level === 'MODULE') {
       if (!curPhase) { errors.push(orphan(rowNumber, 'MODULE', 'PHASE')); return; }
-      curModule = { key, title, order: curPhase.modules.length + 1, row: rowNumber, lessons: [] };
+      curModule = {
+        key, title, order: curPhase.modules.length + 1, row: rowNumber,
+        category: nz(8), lessons: [],
+      };
       curPhase.modules.push(curModule);
       curLesson = null;
     } else if (level === 'LESSON') {
       if (!curModule) { errors.push(orphan(rowNumber, 'LESSON', 'MODULE')); return; }
-      curLesson = { key, title, order: curModule.lessons.length + 1, row: rowNumber, exercises: [] };
+      curLesson = {
+        key, title, order: curModule.lessons.length + 1, row: rowNumber,
+        theory: cell(row, 9), videoUrl: nz(10), audioUrl: nz(11), exercises: [],
+      };
       curModule.lessons.push(curLesson);
     } else if (level === 'EXERCISE') {
       if (!curLesson) { errors.push(orphan(rowNumber, 'EXERCISE', 'LESSON')); return; }
@@ -477,15 +521,8 @@ function countNodes(course) {
 module.exports = { parseXlsx };
 ```
 
-Sửa test `course-content.parser.test.js` cho khớp API **async**: đổi mọi `parseXlsx(...)` thành `await parseXlsx(...)`;
-với case lỗi dùng `await expect(parseXlsx(bad)).rejects.toMatchObject({ code: 'PARSE_FAILED' })` /
-`'EMPTY_COURSE_FILE'`. Ví dụ:
-
-```js
-test('file rỗng (chỉ header) → ApiError EMPTY_COURSE_FILE', async () => {
-  await expect(parseXlsx(await xlsx([]))).rejects.toMatchObject({ code: 'EMPTY_COURSE_FILE' });
-});
-```
+(Test ở Step 1 đã viết theo API **async** — mọi `parseXlsx(...)` đều `await`, các case lỗi dùng
+`.rejects.toMatchObject({ code })`. Không cần sửa thêm.)
 
 - [ ] **Step 4: Chạy test — xác nhận PASS**
 
@@ -725,17 +762,25 @@ afterAll(disconnectDb);
 
 // ── validateCourse (thuần, không DB) ──────────────────────────────────────
 describe('validateCourse', () => {
-  const tree = () => ({
+  const lesson = (extra = {}) => ({ key: 'l1', title: 'L', order: 1, row: 5, theory: '', videoUrl: null, audioUrl: null, exercises: [{ type: 'ipa', refId: 'L1', order: 1, row: 6 }], ...extra });
+  const tree = (lessonExtra = {}) => ({
     slug: 'k', title: 'K', row: 2,
-    phases: [{ key: 'p1', title: 'P', order: 1, row: 3, modules: [
-      { key: 'm1', title: 'M', order: 1, row: 4, lessons: [
-        { key: 'l1', title: 'L', order: 1, row: 5, exercises: [{ type: 'ipa', refId: 'L1', order: 1, row: 6 }] },
-      ] },
+    phases: [{ key: 'p1', title: 'P', order: 1, row: 3, cefrFrom: 'A2', cefrTo: 'B1', modules: [
+      { key: 'm1', title: 'M', order: 1, row: 4, category: 'grammar', lessons: [lesson(lessonExtra)] },
     ] }],
   });
 
   test('cây hợp lệ → không lỗi', () => {
     expect(svc.validateCourse(tree())).toEqual([]);
+  });
+
+  test('Bài học chỉ có lý thuyết (không exercises) → hợp lệ', () => {
+    expect(svc.validateCourse(tree({ theory: '# Lý thuyết', exercises: [] }))).toEqual([]);
+  });
+
+  test('Bài học rỗng hoàn toàn → EMPTY_LESSON', () => {
+    const errs = svc.validateCourse(tree({ theory: '', videoUrl: null, audioUrl: null, exercises: [] }));
+    expect(errs.some((e) => e.code === 'EMPTY_LESSON' && e.row === 5)).toBe(true);
   });
 
   test('Chuyên đề không có Bài học → EMPTY_CHILDREN', () => {
@@ -745,8 +790,17 @@ describe('validateCourse', () => {
 
   test('trùng key Bài học trong cùng Chuyên đề → DUPLICATE_KEY', () => {
     const t = tree();
-    t.phases[0].modules[0].lessons.push({ key: 'l1', title: 'L2', order: 2, row: 7, exercises: [{ type: 'talk', refId: 'travel', order: 1, row: 8 }] });
+    t.phases[0].modules[0].lessons.push({ key: 'l1', title: 'L2', order: 2, row: 7, theory: 't', exercises: [] });
     expect(svc.validateCourse(t).some((e) => e.code === 'DUPLICATE_KEY' && e.row === 7)).toBe(true);
+  });
+
+  test('cefrTo < cefrFrom → INVALID_CEFR', () => {
+    const t = tree(); t.phases[0].cefrFrom = 'B1'; t.phases[0].cefrTo = 'A2';
+    expect(svc.validateCourse(t).some((e) => e.code === 'INVALID_CEFR' && e.row === 3)).toBe(true);
+  });
+
+  test('videoUrl không phải http(s) → INVALID_URL', () => {
+    expect(svc.validateCourse(tree({ videoUrl: 'ftp://x/v.mp4' })).some((e) => e.code === 'INVALID_URL' && e.row === 5)).toBe(true);
   });
 });
 
@@ -804,15 +858,17 @@ Tạo `services/api/src/modules/course-content/course-content.service.js`:
  */
 const { parseXlsx } = require('./course-content.parser');
 const { resolveReferences } = require('./course-content.references');
-const { CourseStructure } = require('./course-content.model');
+const { CourseStructure, CEFR_LEVELS, MODULE_CATEGORIES } = require('./course-content.model');
 const ApiError = require('../../utils/apiError');
 const HTTP = require('../../constants/http-status');
 const CODES = require('../../constants/error-codes');
 
-/** Pure structural validation on the IR: empty children + duplicate keys in scope. */
+const URL_RE = /^https?:\/\//i;
+
+/** Pure structural + Hướng B metadata/content validation on the IR (row-precise errors). */
 function validateCourse(course) {
   const errors = [];
-  const dup = (items, scopeMsg, row) => {
+  const dup = (items, scopeMsg) => {
     const seen = new Set();
     for (const it of items) {
       if (seen.has(it.key)) {
@@ -825,15 +881,32 @@ function validateCourse(course) {
   if (!course.phases.length) {
     errors.push({ code: 'EMPTY_CHILDREN', message: `Dòng ${course.row}: Lộ trình không có Chặng nào`, row: course.row });
   }
-  dup(course.phases, 'Chặng', course.row);
+  dup(course.phases, 'Chặng');
   for (const p of course.phases) {
     if (!p.modules.length) errors.push({ code: 'EMPTY_CHILDREN', message: `Dòng ${p.row}: Chặng không có Chuyên đề nào`, row: p.row });
-    dup(p.modules, 'Chuyên đề', p.row);
+    // CEFR (Hướng B): value hợp lệ + thứ tự cefrTo >= cefrFrom.
+    for (const [f, v] of [['cefrFrom', p.cefrFrom], ['cefrTo', p.cefrTo]]) {
+      if (v && !CEFR_LEVELS.includes(v)) errors.push({ code: 'INVALID_CEFR', message: `Dòng ${p.row}: ${f}='${v}' không thuộc CEFR`, row: p.row });
+    }
+    if (p.cefrFrom && p.cefrTo && CEFR_LEVELS.includes(p.cefrFrom) && CEFR_LEVELS.includes(p.cefrTo)
+        && CEFR_LEVELS.indexOf(p.cefrTo) < CEFR_LEVELS.indexOf(p.cefrFrom)) {
+      errors.push({ code: 'INVALID_CEFR', message: `Dòng ${p.row}: cefrTo (${p.cefrTo}) phải ≥ cefrFrom (${p.cefrFrom})`, row: p.row });
+    }
+    dup(p.modules, 'Chuyên đề');
     for (const m of p.modules) {
+      if (m.category && !MODULE_CATEGORIES.includes(m.category)) {
+        errors.push({ code: 'INVALID_CATEGORY', message: `Dòng ${m.row}: category '${m.category}' không hợp lệ`, row: m.row });
+      }
       if (!m.lessons.length) errors.push({ code: 'EMPTY_CHILDREN', message: `Dòng ${m.row}: Chuyên đề không có Bài học nào`, row: m.row });
-      dup(m.lessons, 'Bài học', m.row);
+      dup(m.lessons, 'Bài học');
       for (const l of m.lessons) {
-        if (!l.exercises.length) errors.push({ code: 'EMPTY_CHILDREN', message: `Dòng ${l.row}: Bài học không có bài tập nào`, row: l.row });
+        // Bài học không rỗng: ≥1 trong {theory, video, audio, exercise} (Hướng B).
+        if (!l.theory && !l.videoUrl && !l.audioUrl && !l.exercises.length) {
+          errors.push({ code: 'EMPTY_LESSON', message: `Dòng ${l.row}: Bài học không có lý thuyết/video/audio/bài tập nào`, row: l.row });
+        }
+        for (const [f, v] of [['videoUrl', l.videoUrl], ['audioUrl', l.audioUrl]]) {
+          if (v && !URL_RE.test(v)) errors.push({ code: 'INVALID_URL', message: `Dòng ${l.row}: ${f} phải là http(s)://…`, row: l.row });
+        }
       }
     }
   }
@@ -851,11 +924,11 @@ function buildDoc(course, user) {
     importedBy: user.id,
     sourceMeta: { format: 'xlsx', nodeCount: course.nodeCount ?? null },
     phases: course.phases.map((p) => ({
-      ...strip(p, ['key', 'title', 'order']),
+      ...strip(p, ['key', 'title', 'order', 'cefrFrom', 'cefrTo', 'goalNote']),
       modules: p.modules.map((m) => ({
-        ...strip(m, ['key', 'title', 'order']),
+        ...strip(m, ['key', 'title', 'order', 'category']),
         lessons: m.lessons.map((l) => ({
-          ...strip(l, ['key', 'title', 'order']),
+          ...strip(l, ['key', 'title', 'order', 'theory', 'videoUrl', 'audioUrl']),
           exercises: l.exercises.map((e) => strip(e, ['type', 'refId', 'order', 'label'])),
         })),
       })),
@@ -913,7 +986,7 @@ Run:
 ```bash
 cd services/api && npx jest course-content.service -i
 ```
-Expected: 6 test PASS.
+Expected: 10 test PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1266,6 +1339,8 @@ Nhắc người phụ trách deploy (design §11):
 - **AC-3** (từ chối exercise ID không tồn tại, liệt kê đúng ID) → Task 4 (REFERENCE_NOT_FOUND) + Task 6 (API errors[]). ✅
 - **AC-4** (all-or-nothing) → Task 5 (`countDocuments === 0` khi lỗi) + single-insert model Task 2. ✅
 - **AC-5** (hiển thị kết quả trên exe-admin) → Task 7 (page render summary + errors[]). ✅
+- **AC-6** (lưu CEFR Chặng + category Chuyên đề — IS-9) → Task 2 (model field + enum) + Task 3 (parser cột F/G/H/L) + Task 5 (validate INVALID_CEFR/INVALID_CATEGORY). ✅
+- **AC-7** (theory/video/audio + Bài học lý thuyết-thuần — IS-10) → Task 2 (model field, exercises không bắt buộc) + Task 3 (parser cột I/J/K) + Task 5 (EMPTY_LESSON thay vì bắt ≥1 exercise). ✅
 - **AC-E1** (file không parse được → lỗi rõ, không 500) → Task 3 (PARSE_FAILED). ✅
 - **AC-E2** (file rỗng / không tầng) → Task 3 (EMPTY_COURSE_FILE). ✅
 - **AC-E3** (trùng key nội bộ) → Task 5 (DUPLICATE_KEY). ✅
@@ -1273,6 +1348,8 @@ Nhắc người phụ trách deploy (design §11):
 - **AC-E5** (trùng khóa đã tồn tại — Q4/(a)) → Task 5 (ALREADY_EXISTS + safety net E11000, không đè). ✅
 - **AC-E6** (bài tập chưa publish) → Task 4 (REFERENCE_NOT_PUBLISHED). ✅
 - **AC-E7** (type quiz — hoãn Phase 2) → Task 2 (enum model) + Task 4 (UNSUPPORTED_EXERCISE_TYPE). ✅
+- **AC-E8** (Bài học rỗng hoàn toàn — IS-10) → Task 5 (EMPTY_LESSON). ✅
+- **AC-E9** (metadata/URL sai — IS-9/IS-10) → Task 5 (INVALID_CEFR / INVALID_CATEGORY / INVALID_URL). ✅
 - **NFR Bảo mật** (permission platform-only, centerId từ server) → Task 1 (permission, không vào CENTER) + Task 5 (`centerId: null`) + Task 6 (403 test). ✅
 - **NFR Audit** (audit hook mỗi import) → Task 6 (`auditLog` gọi với `coursecontent.import`). ✅
 - **NFR Hiệu năng** (đồng bộ, ≤5MB) → Task 6 (multer 5MB) + Task 8 §3 (nginx note). ✅
@@ -1283,7 +1360,8 @@ Nhắc người phụ trách deploy (design §11):
 - `parseXlsx` (Task 3) trả `{ course, errors }` async → dùng đúng ở `importCourse` (Task 5, có `await`). ✅
 - `resolveReferences` (Task 4) trả `errors[]` object `{ code, message, row, refType, refId }` → khớp cách
   `importCourse` gộp và assert ở Task 6. ✅
-- `CourseStructure` + `EXERCISE_TYPES` (Task 2) khớp import ở service (Task 5) và test (Task 5/6). ✅
+- `CourseStructure` + `EXERCISE_TYPES` + `CEFR_LEVELS` + `MODULE_CATEGORIES` (Task 2) khớp import ở service (Task 5, dùng cho validate CEFR/category) và test. ✅
+- Field Hướng B (`cefrFrom/cefrTo/goalNote`, `category`, `theory/videoUrl/audioUrl`) đặt tên nhất quán giữa model (Task 2), parser IR (Task 3), `buildDoc`/`validateCourse` (Task 5) và cột Excel (design §3.2). ✅
 - `courseImportUpload` (Task 6 middleware) khớp import ở admin router (Task 6). ✅
 - `PERMISSIONS.COURSECONTENT_WRITE` = `'coursecontent:write'` (Task 1) khớp `verifyPermission` (Task 6) và test
   seed permission (Task 6). ✅

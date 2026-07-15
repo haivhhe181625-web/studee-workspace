@@ -41,6 +41,18 @@
 - [ ] Sau khi import **thành công**, trang Import trên `exe-admin` hiển thị tóm tắt số tầng đã tạo (giá trị khớp AC-1).
 - [ ] Sau khi import **thất bại**, trang Import hiển thị danh sách lỗi cụ thể (khớp lỗi ở AC-2/AC-3/AC-E1), không chỉ thông báo chung chung "import failed".
 
+### AC-6: Lưu ngữ nghĩa nâng cấp trình độ *(IS-9)* — **(Hướng B)**
+
+- **Given** một file hợp lệ mà một **Chặng** có `cefrFrom=A2`, `cefrTo=B1` (hoặc `goalNote="IELTS 5.0→6.0"`), và một **Chuyên đề** có `category=grammar`
+- **When** user import
+- **Then** khóa lưu đúng các giá trị đó trên Chặng/Chuyên đề tương ứng (đọc lại document thấy `cefrFrom/cefrTo/goalNote` và `category` khớp file)
+
+### AC-7: Lưu nội dung học đa phương thức ở Bài học *(IS-10)* — **(Hướng B)**
+
+- **Given** một file hợp lệ mà một **Bài học** có `theory` (lý thuyết), `videoUrl`, `audioUrl`, và một Bài học khác **chỉ có lý thuyết** (không dòng EXERCISE nào)
+- **When** user import
+- **Then** cả hai Bài học được lưu; Bài học đầu giữ đúng `theory/videoUrl/audioUrl`; Bài học chỉ-lý-thuyết **được chấp nhận** (không bị coi là rỗng)
+
 ## Tiêu chí lỗi / edge case
 
 ### AC-E1: File không phân tích được (sai định dạng/hỏng) *(IS-2, IS-7)*
@@ -91,6 +103,21 @@
 - **When** user tải file lên
 - **Then** hệ thống **từ chối** với **400** `IMPORT_VALIDATION_FAILED`, `errors[]` kèm `UNSUPPORTED_EXERCISE_TYPE`
   ("quiz sẽ được hỗ trợ ở Phase 2") + số dòng; **không** tạo bản ghi nào. Phase 1 chỉ chấp nhận `ipa` + `talk`.
+
+### AC-E8: Bài học rỗng hoàn toàn *(IS-10)* — **(Hướng B)**
+
+- **Given** một Bài học **không** có lý thuyết, **không** video, **không** audio, và **không** bài tập nào
+- **When** user tải file lên
+- **Then** từ chối với `errors[]` kèm `EMPTY_LESSON` + số dòng; **không** tạo bản ghi nào. (Chỉ cần ≥1 trong
+  {lý thuyết, video, audio, bài tập} là hợp lệ.)
+
+### AC-E9: Metadata / URL sai định dạng *(IS-9, IS-10)* — **(Hướng B)**
+
+- **Given** một file có `cefrFrom`/`cefrTo` ngoài enum CEFR (hoặc `cefrTo` < `cefrFrom`), hoặc `category` ngoài
+  danh mục, hoặc `videoUrl`/`audioUrl` không phải `http(s)://…`
+- **When** user tải file lên
+- **Then** từ chối với `errors[]` kèm `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` + số dòng; **không** tạo
+  bản ghi nào.
 
 ## Tiêu chí phi chức năng (nếu áp dụng)
 

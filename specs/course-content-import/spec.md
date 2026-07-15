@@ -42,6 +42,8 @@ Cho phép đội ngũ học thuật/Admin tải lên một file cấu trúc khó
 - **IS-6** — Khi hợp lệ: lưu toàn bộ cấu trúc phân tầng vào kho nội dung khóa học, ở trạng thái "sẵn sàng" để Phase 2 tiêu thụ.
 - **IS-7** — Phản hồi kết quả: khi thành công báo tóm tắt (số Chặng/Chuyên đề/Bài học đã tạo); khi thất bại trả **danh sách lỗi cụ thể** (chỉ rõ dòng/mục/trường nào sai và sai gì) đủ để đội học thuật tự sửa file.
 - **IS-8** — Phân quyền: chỉ user có quyền quản trị nội dung phù hợp mới thực hiện được Import.
+- **IS-9** *(bổ sung — Hướng B, 2026-07-15)* — **Ngữ nghĩa nâng cấp trình độ:** mỗi **Chặng** lưu được nấc tiến bộ (CEFR `cefrFrom`→`cefrTo`, vd A2→B1, hoặc `goalNote` tự do như "IELTS 5.0→6.0"); mỗi **Chuyên đề** lưu được **phân loại** (ngữ pháp/phát âm/từ vựng/nghe/đọc/viết/nói). Hệ thống validate các giá trị này.
+- **IS-10** *(bổ sung — Hướng B, 2026-07-15)* — **Nội dung học đa phương thức ở Bài học:** mỗi **Bài học** lưu được **lý thuyết** (text/markdown), **link video**, **link audio** (dạng URL — đội học thuật tự host, hệ thống KHÔNG upload/host media). Bài học chỉ-lý-thuyết (không bài tập) là hợp lệ. Bài tập tích hợp Phase 1 vẫn chỉ gồm `ipa` + `talk`.
 
 ### Ngoài phạm vi
 
@@ -49,6 +51,8 @@ Cho phép đội ngũ học thuật/Admin tải lên một file cấu trúc khó
 - Theo dõi tiến độ, mastery, streak, aggregate điểm (`user-streak`, `progress.service`) — **Lý do:** thuộc Phase 3, và phần lớn đã có tiền lệ ở `modules/adaptive/` cần khảo sát riêng, không nhồi vào Phase 1.
 - Luồng dựng khóa **thủ công kéo-thả trên CMS UI** (Luồng 2 trong idea) — **Lý do:** framing đã chọn ưu tiên luồng Import file; luồng thủ công là giải pháp thay thế cho cùng nhu cầu, làm sau nếu cần.
 - **Tạo/sửa nội dung bài tập IPA/Talk/Quiz** — **Lý do:** các bài tập này đã có công cụ quản lý riêng; Phase 1 chỉ **tham chiếu** ID có sẵn, không tạo mới bài tập.
+- **Engine bài tập cho Nghe / Đọc / Viết / Ngữ pháp / Từ vựng, và loại `quiz`** — **Lý do:** hệ thống hiện CHƯA có engine bài tập tái dùng cho các kỹ năng này (chỉ có IPA phát âm + Talk hội thoại AI); xây engine mới là hạng mục lớn, tách phase sau. Phase 1 vẫn phủ được các kỹ năng đó ở mức **lý thuyết/video/audio** (IS-10), chỉ chưa có **bài tập tương tác** cho chúng.
+- **Upload/host media (video, audio) cho khóa học** — **Lý do:** Hướng B chỉ lưu **URL** do đội học thuật tự host (CDN/YouTube/R2); luồng upload/serve media tập trung để sau nếu cần.
 - Refactor đưa prompt AI ra khỏi source code (`ai-prompt.model` — Epic 2) — **Lý do:** là hạng mục độc lập, không cần thiết để import cấu trúc khóa học.
 - Xuất/chỉnh sửa lại (export/edit) khóa học đã import qua giao diện — **Lý do:** Phase 1 chỉ giải quyết chiều đưa dữ liệu vào (ingestion); sửa/versioning là nhu cầu sau.
 - Learner surface trên `web`/`mobile` — **Lý do:** không có người dùng cuối tiêu thụ ở Phase 1.
