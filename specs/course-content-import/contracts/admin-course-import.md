@@ -3,8 +3,8 @@
 - **Loại:** Cross-repo (api↔admin)
 - **Bên cung cấp (provider):** `api` (`exe-api`, `src/admin-api/`)
 - **Bên tiêu thụ (consumer):** `admin` (`exe-admin` — trang Import + màn quản lý khóa đã import)
-- **Trạng thái:** Đã thống nhất định dạng import (PO chốt Q1–Q6 + Q-Quiz + Hướng B). **Các endpoint quản lý
-  (§2–§5) là đề xuất Tech Lead nâng từ Phase 2 lên Phase 1 — chờ xác nhận ở Technical Review** (lý do: §0.3).
+- **Trạng thái:** Đã thống nhất (PO chốt Q1–Q6 + Q-Quiz + Hướng B). **PO đã duyệt nâng §2–§5 (template/list/
+  detail/delete) vào Phase 1 (2026-07-15)** — toàn bộ 5 endpoint đều thuộc Phase 1.
 
 ## 0. Tổng quan
 
@@ -22,19 +22,23 @@
 
 | # | Method | Path | Permission | Phase | Mục đích |
 |---|---|---|---|---|---|
-| §1 | `POST` | `/course-imports/_/import` | `coursecontent:write` | **1 — đã chốt** | Import 1 file `.xlsx` → tạo khóa |
-| §2 | `GET` | `/course-imports/template` | `coursecontent:read` | **1 — đề xuất** | Tải template `.xlsx` chuẩn |
-| §3 | `GET` | `/course-imports` | `coursecontent:read` | **1 — đề xuất** | Liệt kê khóa đã import (phân trang) |
-| §4 | `GET` | `/course-imports/:id` | `coursecontent:read` | **1 — đề xuất** | Chi tiết 1 khóa (cả cây) |
-| §5 | `DELETE` | `/course-imports/:id` | `coursecontent:delete` | **1 — đề xuất** | Xoá 1 khóa (để sửa & import lại) |
+| §1 | `POST` | `/course-imports/_/import` | `coursecontent:write` | **1** | Import 1 file `.xlsx` → tạo khóa |
+| §2 | `GET` | `/course-imports/template` | `coursecontent:read` | **1** | Tải template `.xlsx` chuẩn |
+| §3 | `GET` | `/course-imports` | `coursecontent:read` | **1** | Liệt kê khóa đã import (phân trang) |
+| §4 | `GET` | `/course-imports/:id` | `coursecontent:read` | **1** | Chi tiết 1 khóa (cả cây) |
+| §5 | `DELETE` | `/course-imports/:id` | `coursecontent:delete` | **1** | Xoá 1 khóa (để sửa & import lại) |
 
 > **Thứ tự đăng ký route (quan trọng):** `/_/import` và `/template` phải mount **trước** route `/:id` của factory,
 > nếu không `:id` sẽ "nuốt" `template` (Express match `/template` thành `:id='template'`).
 
-### 0.3 Vì sao nâng §2–§5 lên Phase 1 (đề xuất Tech Lead)
+### 0.3 Vì sao §2–§5 thuộc Phase 1 (PO đã duyệt 2026-07-15)
 
-Bản design gốc hoãn list/read sang Phase 2. Khi rà lại plan, 4 endpoint này **cần cho Phase 1 dùng được thực
-tế**, và chi phí thấp (list/get/delete sinh sẵn từ `_crud.factory.js` — chỉ config; template là 1 GET nhỏ):
+Bản design gốc hoãn list/read sang Phase 2; rà lại plan cho thấy 4 endpoint này **cần cho Phase 1 dùng được thực
+tế**, và chi phí thấp (list/get/delete là truy vấn Mongoose đơn giản; template là 1 GET nhỏ):
+
+> **Cài đặt (đã cân nhắc):** §3/§4/§5 **hand-mount read/delete** trong `course-content.admin.js`, **KHÔNG** dùng
+> `adminResource` factory generic — vì factory tự thêm `POST`/`PATCH` cho phép tạo/sửa cây khóa **bỏ qua validate
+> import** (phá bất biến all-or-nothing). Chỉ mở đúng đọc + xoá; tạo khóa duy nhất qua §1 import.
 
 - **Template (§2):** đội học thuật non-tech cần file mẫu đúng cột để điền — thiếu nó thì tính năng "để non-tech tự
   soạn" (giá trị cốt lõi Epic 4) không trọn.
@@ -43,8 +47,7 @@ tế**, và chi phí thấp (list/get/delete sinh sẵn từ `_crud.factory.js` 
 - **Delete (§5):** vì Q4 = **từ chối trùng**, muốn sửa một khóa đã import buộc phải xoá rồi import lại. Không có
   endpoint xoá ⇒ phải can thiệp DB thủ công (đã nêu là điểm yếu ở `design.md` §9). §5 đóng lỗ hổng này.
 
-Nếu Technical Review **không** duyệt nâng scope: giữ §1 cho Phase 1, chuyển §2–§5 sang Phase 2 (contract vẫn dùng
-lại được).
+→ **PO đã duyệt** đưa cả 5 endpoint vào Phase 1.
 
 ---
 
@@ -114,7 +117,7 @@ FE hiển thị `counts` như tóm tắt thành công (AC-5).
 
 ---
 
-## §2. `GET /course-imports/template` — Tải template Excel *(Phase 1 — đề xuất)*
+## §2. `GET /course-imports/template` — Tải template Excel *(Phase 1)*
 
 ```
 GET /api/admin/course-imports/template
@@ -140,14 +143,14 @@ GET /api/admin/course-imports/template
 
 ---
 
-## §3. `GET /course-imports` — Liệt kê khóa đã import *(Phase 1 — đề xuất)*
+## §3. `GET /course-imports` — Liệt kê khóa đã import *(Phase 1)*
 
 ```
 GET /api/admin/course-imports?page=1&limit=20&q=<từ khóa>&sort=-createdAt
 ```
 
 - **Permission:** `coursecontent:read`.
-- **Cài đặt:** `adminResource` factory (config-only) trên model `CourseStructure`.
+- **Cài đặt:** hand-mount — `CourseStructure.find()` với projection + skip/limit + `countDocuments`.
 
 ### Query params
 
@@ -183,14 +186,14 @@ GET /api/admin/course-imports?page=1&limit=20&q=<từ khóa>&sort=-createdAt
 
 ---
 
-## §4. `GET /course-imports/:id` — Chi tiết 1 khóa *(Phase 1 — đề xuất)*
+## §4. `GET /course-imports/:id` — Chi tiết 1 khóa *(Phase 1)*
 
 ```
 GET /api/admin/course-imports/:id
 ```
 
 - **Permission:** `coursecontent:read`.
-- **Cài đặt:** `adminResource` factory `GET /:id`.
+- **Cài đặt:** hand-mount — `CourseStructure.findById().lean()`.
 
 ### Response — 200
 
@@ -227,7 +230,7 @@ Trả **cả cây** (document là 1 khối):
 
 ---
 
-## §5. `DELETE /course-imports/:id` — Xoá 1 khóa *(Phase 1 — đề xuất)*
+## §5. `DELETE /course-imports/:id` — Xoá 1 khóa *(Phase 1)*
 
 ```
 DELETE /api/admin/course-imports/:id
@@ -235,7 +238,7 @@ DELETE /api/admin/course-imports/:id
 
 - **Permission:** `coursecontent:delete` (chỉ `coursecontent:manage` thoả — bar cao vì thao tác phá huỷ; quyền
   `write` để import KHÔNG đủ để xoá).
-- **Cài đặt:** `adminResource` factory DELETE với **`allowHardDelete: true`** — **xoá cứng**.
+- **Cài đặt:** hand-mount — `CourseStructure.findByIdAndDelete()` (**xoá cứng**) + `auditLog` thủ công.
 
 > **Vì sao xoá cứng (không soft-delete):** để `slug` được giải phóng, cho phép **import lại** khóa đã sửa (Q4 từ
 > chối trùng dựa trên `slug` unique). Soft-delete sẽ giữ `slug` trong DB ⇒ import lại vẫn `ALREADY_EXISTS`. Phase

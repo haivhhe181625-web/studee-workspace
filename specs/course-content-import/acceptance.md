@@ -53,6 +53,30 @@
 - **When** user import
 - **Then** cả hai Bài học được lưu; Bài học đầu giữ đúng `theory/videoUrl/audioUrl`; Bài học chỉ-lý-thuyết **được chấp nhận** (không bị coi là rỗng)
 
+### AC-8: Tải template Excel *(§2 contract)* — **(Phase 1)**
+
+- **Given** một user có `coursecontent:read`
+- **When** gọi `GET /api/admin/course-imports/template`
+- **Then** nhận file `.xlsx` (Content-Type xlsx, có Content-Disposition attachment) gồm dòng header 12 cột + vài dòng ví dụ; user thiếu quyền → 403
+
+### AC-9: Liệt kê khóa đã import *(§3 contract)* — **(Phase 1)**
+
+- **Given** đã import ≥1 khóa, và user có `coursecontent:read`
+- **When** gọi `GET /api/admin/course-imports?page=1&limit=20`
+- **Then** trả `items[]` (slug/title/status/createdAt) + `total/page/limit`, **không** trả cả cây `phases` ở list; user thiếu quyền → 403
+
+### AC-10: Xem chi tiết 1 khóa *(§4 contract)* — **(Phase 1)**
+
+- **Given** một khóa đã import với `id`, user có `coursecontent:read`
+- **When** gọi `GET /api/admin/course-imports/:id`
+- **Then** trả **cả cây** (Chặng→Chuyên đề→Bài học kèm `cefr/category/theory/video/audio/exercises`); `id` không tồn tại → 404
+
+### AC-11: Xoá khóa & import lại *(§5 contract, Q4)* — **(Phase 1)**
+
+- **Given** một khóa đã import với `slug` S, user có `coursecontent:delete` (hoặc `manage`)
+- **When** gọi `DELETE /api/admin/course-imports/:id` rồi import lại file có `slug` S
+- **Then** xoá thành công (`{ deleted: true }`, xoá **cứng** → giải phóng `slug`), và **import lại S thành công** (không còn `ALREADY_EXISTS`); user chỉ có `coursecontent:write` (không delete/manage) gọi DELETE → **403**; `id` không tồn tại → 404
+
 ## Tiêu chí lỗi / edge case
 
 ### AC-E1: File không phân tích được (sai định dạng/hỏng) *(IS-2, IS-7)*

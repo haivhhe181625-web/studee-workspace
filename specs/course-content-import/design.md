@@ -151,12 +151,13 @@ Xử lý **đồng bộ** trong request (Q6). Vài giây cho file ≤5MB.
 ## 5. Contracts
 
 - `contracts/admin-course-import.md` — **Cross-repo (api↔admin)**: hợp đồng API đầy đủ của bề mặt admin course
-  content. Gồm **§1 `POST /_/import`** (Phase 1 — đã chốt) + **§2 template / §3 list / §4 detail / §5 delete**
-  (Tech Lead **đề xuất nâng từ Phase 2 lên Phase 1** để feature dùng được thực tế + đóng lỗ hổng re-import của Q4 —
-  chờ Technical Review chốt). Ranh giới cross-repo duy nhất của Phase 1 (learner `web` là api↔web, Phase 2).
-- **[Cần chốt ở Technical Review]** Có nâng §2–§5 vào Phase 1 không (chi phí thấp: list/get/delete sinh từ
-  `_crud.factory.js`; template là 1 GET nhỏ) — xem contract §0.3. Nếu duyệt → thêm task tương ứng vào `tasks.md`
-  và hằng `COURSECONTENT_DELETE` vào `permissions.js`.
+  content, **cả 5 endpoint đều Phase 1** (PO duyệt 2026-07-15): **§1 `POST /_/import`** + **§2 `GET /template`** +
+  **§3 `GET /` (list)** + **§4 `GET /:id`** + **§5 `DELETE /:id`**. Ranh giới cross-repo duy nhất của Phase 1
+  (learner `web` là api↔web, Phase 2 — xem `docs/roadmap-task-based-learning.md`).
+- **Toàn bộ §1–§5 hand-mount** trong `course-content.admin.js` (KHÔNG dùng `adminResource` factory generic — factory
+  tự thêm `POST`/`PATCH` cho tạo/sửa cây khóa bỏ qua validate import ⇒ phá bất biến; chỉ mở đọc + xoá). §1 cần
+  multer; §2 trả binary; §3 `find()`+phân trang; §4 `findById`; §5 `findByIdAndDelete` (xoá cứng) + audit thủ
+  công. Cần thêm hằng `COURSECONTENT_DELETE` vào `permissions.js`.
 - Đọc chéo `ipa`/`talk` là **cùng service `api`, cùng repo** → không phải ranh giới cross-service → §3.3 là đủ,
   không cần file contract riêng. (Không đụng `llm`/`cat`.)
 
@@ -170,13 +171,14 @@ Xử lý **đồng bộ** trong request (Q6). Vài giây cho file ≤5MB.
 | `services/api/src/modules/course-content/course-content.references.js` | Resolver registry (ipa published / talk) validate IS-4 | Tạo |
 | `services/api/src/modules/course-content/course-content.service.js` | `importCourse()` — parse→validate→build→ghi; throw `ApiError` | Tạo |
 | `services/api/src/middlewares/course-import.upload.js` | multer single `file`, ≤5MB, mime `.xlsx` + map lỗi → `ApiError` (mẫu `upload.js`) | Tạo |
-| `services/api/src/admin-api/resources/course-content.admin.js` | Resource + collection action `import` (delegate) + list/read khóa đã import | Tạo |
-| `services/api/src/admin-api/_router.js` | Đăng ký resource mới vào vòng factory | Sửa |
-| `services/api/src/constants/permissions.js` | Thêm `COURSECONTENT_READ/WRITE/MANAGE` (chỉ platform, KHÔNG vào `CENTER_PERMISSIONS`) | Sửa |
-| `services/api/src/constants/error-codes.js` | Thêm: `PARSE_FAILED`, `IMPORT_VALIDATION_FAILED`, `EMPTY_COURSE_FILE`, `UNSUPPORTED_EXERCISE_TYPE` | Sửa |
-| `exe-admin/src/app/(admin)/course-import/page.tsx` | Trang Import: form upload `.xlsx` + hiển thị summary/lỗi (AC-5) | Tạo |
-| `exe-admin/src/services/course-content.service.ts` | Gọi `POST /admin/course-imports/_/import` (multipart) + list khóa | Tạo |
-| `services/api/src/__tests__/course-content.import.test.js` | Test AC-1..AC-4, AC-E1..E4, AC-E6 (§10) | Tạo |
+| `services/api/src/admin-api/resources/course-content.admin.js` | Router hand-mount §1 import + §2 template + §3 list + §4 detail + §5 delete (xoá cứng); route cụ thể trước `/:id` | Tạo |
+| `services/api/src/admin-api/_router.js` | Đăng ký `router.use('/course-imports', ...)` | Sửa |
+| `services/api/src/constants/permissions.js` | Thêm `COURSECONTENT_READ/WRITE/DELETE/MANAGE` (chỉ platform, KHÔNG vào `CENTER_PERMISSIONS`) | Sửa |
+| `services/api/src/constants/error-codes.js` | Thêm: `PARSE_FAILED`, `INVALID_FILE_TYPE`, `IMPORT_VALIDATION_FAILED`, `EMPTY_COURSE_FILE`, `UNSUPPORTED_EXERCISE_TYPE` | Sửa |
+| `exe-admin/src/app/(admin)/course-import/page.tsx` | Trang Import: upload + summary/lỗi; danh sách khóa (list) + nút xoá + tải template (AC-5, AC-8..AC-11) | Tạo |
+| `exe-admin/src/services/course-content.service.ts` | Gọi import + template + list + detail + delete | Tạo |
+| `services/api/src/__tests__/course-content.import.test.js` | Test AC-1..AC-4, AC-E1..E9 (§10) | Tạo |
+| `services/api/src/__tests__/course-content.admin.test.js` | Test §2–§5 (template/list/detail/delete + quyền) | Tạo |
 
 ## 7. Xử lý lỗi
 
@@ -201,9 +203,10 @@ cần khai báo trong `error-codes.js` — chỉ top-level `IMPORT_VALIDATION_FA
 
 ## 8. Bảo mật & quyền
 
-- **Permission mới:** `coursecontent:read/write/manage` (2-segment `<resource>:<action>`, thêm vào
-  `src/constants/permissions.js`). Import gate `coursecontent:write` (`manage` implies write). List/xem khóa đã
-  import gate `coursecontent:read`. **Không** tái dùng `course:*`.
+- **Permission mới:** `coursecontent:read/write/delete/manage` (2-segment `<resource>:<action>`, thêm vào
+  `src/constants/permissions.js`). Import gate `coursecontent:write`; template/list/detail gate
+  `coursecontent:read`; **delete gate `coursecontent:delete`** (chỉ `manage` thoả — bar cao vì phá huỷ; `write` để
+  import KHÔNG đủ xoá). **Không** tái dùng `course:*`.
 - **Chỉ platform admin/đội học thuật** giữ `coursecontent:*` (Q5). **KHÔNG** thêm vào `CENTER_PERMISSIONS` bundle
   ở Phase 1. `centerId` luôn `null` (nội dung dùng chung). Resource **không** bật `tenantScoped` ở Phase 1.
 - **5 rules auth tuyệt đối** (`<API_REPO>/docs/api/CONVENTIONS.md` §5): permission ở backend; không trust body;

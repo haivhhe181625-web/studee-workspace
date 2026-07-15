@@ -1,6 +1,6 @@
 # Tasks: Import cấu trúc Khóa học tĩnh (Admin Content Ingestion — Phase 1)
 
-> **Cho Developer Agent:** implement theo đúng thứ tự Task 1 → 8. Mỗi Task độc lập test được, commit riêng.
+> **Cho Developer Agent:** implement theo đúng thứ tự Task 1 → 9. Mỗi Task độc lập test được, commit riêng.
 > Dùng `.ai/prompts/implement-task.md` cho từng task.
 
 **Design:** `specs/course-content-import/design.md` (đã duyệt Technical Review 2026-07-15)
@@ -22,12 +22,12 @@
 `order` của mỗi node suy ra từ thứ tự dòng trong cùng cha. Dòng 1 là header (bỏ qua). Số dòng báo lỗi = số dòng
 Excel thật (1-based).
 
-> **Ghi chú kiến trúc (đã chốt khi breakdown):** endpoint Import được **hand-mount** trong `_router.js` (không dùng
-> `actions` của `_crud.factory.js`) vì cần chèn middleware `multer` để nhận `multipart/form-data` — chain factory
-> hiện không cho chèn middleware giữa `verifyPermission` và handler. Đây đúng tiền lệ các route admin hand-mounted
-> (`/staff`, `/reviews` trong `_router.js`): vẫn `verifyToken → verifyPermission → delegate service → auditLog thủ
-> công`. **List/read khóa đã import bỏ khỏi Phase 1** (không AC nào cần duyệt/browse khóa — đó là Phase 2 tiêu
-> thụ); chỉ build endpoint Import.
+> **Ghi chú kiến trúc (đã chốt khi breakdown):** toàn bộ endpoint được **hand-mount** trong
+> `course-content.admin.js` (không dùng `adminResource`/`actions` của `_crud.factory.js`): import cần `multer`; và
+> factory generic sẽ lộ `POST`/`PATCH` cho tạo/sửa cây khóa **bỏ qua validate import** — nên chỉ mở đọc + xoá.
+> Đây đúng tiền lệ route admin hand-mounted (`/staff`, `/reviews`): `verifyToken → verifyPermission → (service/
+> query) → auditLog thủ công`. **§2–§5 (template/list/detail/delete) thuộc Phase 1** (PO duyệt 2026-07-15) — làm ở
+> Task 7.
 
 ---
 
@@ -37,21 +37,22 @@ Excel thật (1-based).
 |---|---|---|
 | `services/api/package.json` | Thêm dependency `exceljs` | Sửa |
 | `services/api/src/constants/error-codes.js` | Thêm `PARSE_FAILED`, `EMPTY_COURSE_FILE`, `IMPORT_VALIDATION_FAILED`, `UNSUPPORTED_EXERCISE_TYPE`, `INVALID_FILE_TYPE` | Sửa |
-| `services/api/src/constants/permissions.js` | Thêm `COURSECONTENT_READ/WRITE/MANAGE` (KHÔNG vào `CENTER_PERMISSIONS`) | Sửa |
+| `services/api/src/constants/permissions.js` | Thêm `COURSECONTENT_READ/WRITE/DELETE/MANAGE` (KHÔNG vào `CENTER_PERMISSIONS`) | Sửa |
 | `services/api/src/modules/course-content/course-content.model.js` | Schema `CourseStructure` + cây nhúng + index | Tạo |
 | `services/api/src/modules/course-content/course-content.parser.js` | `parseXlsx(buffer)` → `{ course, errors }` (IR + số dòng) | Tạo |
 | `services/api/src/modules/course-content/course-content.references.js` | `resolveReferences(course)` — validate IPA published / talk / quiz | Tạo |
 | `services/api/src/modules/course-content/course-content.service.js` | `validateCourse`, `importCourse` — parse→validate→build→ghi | Tạo |
 | `services/api/src/middlewares/course-import.upload.js` | multer `.xlsx` ≤5MB, map lỗi → ApiError | Tạo |
-| `services/api/src/admin-api/resources/course-content.admin.js` | Router hand-mount `POST /_/import` (delegate service + audit) | Tạo |
+| `services/api/src/admin-api/resources/course-content.admin.js` | Router hand-mount §1 import + §2 template + §3 list + §4 detail + §5 delete | Tạo |
 | `services/api/src/admin-api/_router.js` | `router.use('/course-imports', ...)` | Sửa |
 | `services/api/src/__tests__/course-content.model.test.js` | Unit model (validate + unique slug) | Tạo |
 | `services/api/src/__tests__/course-content.parser.test.js` | Unit parser (IR, PARSE/EMPTY/ORPHAN) | Tạo |
 | `services/api/src/__tests__/course-content.references.test.js` | Unit resolver (ipa/talk/quiz) | Tạo |
 | `services/api/src/__tests__/course-content.service.test.js` | Unit service (validate + importCourse + all-or-nothing) | Tạo |
-| `services/api/src/__tests__/course-content.import.api.test.js` | API test (403/200/audit qua supertest) | Tạo |
-| `exe-admin/src/services/course-content.service.ts` | Gọi `POST /admin/course-imports/_/import` (multipart) | Tạo |
-| `exe-admin/src/app/(admin)/course-import/page.tsx` | Trang Import (upload + summary/lỗi) | Tạo |
+| `services/api/src/__tests__/course-content.import.api.test.js` | API test import (403/200/audit qua supertest) | Tạo |
+| `services/api/src/__tests__/course-content.admin.test.js` | API test §2–§5 (template/list/detail/delete + quyền) | Tạo |
+| `exe-admin/src/services/course-content.service.ts` | Gọi import + template + list + detail + delete | Tạo |
+| `exe-admin/src/app/(admin)/course-import/page.tsx` | Trang Import (upload + summary/lỗi) + danh sách khóa + xoá + tải template | Tạo |
 
 ---
 
@@ -93,6 +94,7 @@ Trong `services/api/src/constants/permissions.js`, thêm vào object `PERMISSION
   // Platform-only (Q5): KHÔNG thêm vào CENTER_PERMISSIONS — nội dung dùng chung.
   COURSECONTENT_READ: 'coursecontent:read',
   COURSECONTENT_WRITE: 'coursecontent:write',
+  COURSECONTENT_DELETE: 'coursecontent:delete', // §5 xoá khóa — chỉ manage thoả (write không đủ)
   COURSECONTENT_MANAGE: 'coursecontent:manage',
 ```
 
@@ -1163,7 +1165,7 @@ Tạo `services/api/src/admin-api/resources/course-content.admin.js`:
  * factory actions) because it needs a multer middleware for multipart before the
  * handler. Follows the admin-api HARD RULE: no business logic here — delegates to
  * course-content.service.importCourse and emits the audit log manually (same shape
- * as /staff in _router.js). List/read of imported courses is Phase 2 (consume).
+ * as /staff in _router.js). §2–§5 (template/list/detail/delete) are added in Task 7.
  */
 const express = require('express');
 const { verifyToken, verifyPermission } = require('../../middlewares/auth');
@@ -1178,6 +1180,8 @@ const courseContentService = require('../../modules/course-content/course-conten
 
 const router = express.Router();
 
+// §1 — Import (hand-mount vì cần multer). Route cụ thể (/_/import, /template) phải
+// đứng TRƯỚC route /:id (thêm ở Task 7) để /:id không nuốt chúng.
 router.post(
   '/_/import',
   verifyToken,
@@ -1223,7 +1227,220 @@ git commit -m "feat(admin): POST /api/admin/course-imports/_/import (xlsx course
 
 ---
 
-## Task 7: Trang Import trên `exe-admin` (cross-repo consumer)
+## Task 7: Endpoint quản lý khóa — §2 template / §3 list / §4 detail / §5 delete
+
+> Contract: `contracts/admin-course-import.md` §2–§5 (PO duyệt vào Phase 1). **Hand-mount hết** (KHÔNG dùng
+> `adminResource` factory generic — factory lộ `POST`/`PATCH` cho tạo/sửa cây khóa bỏ qua validate import). Chỉ mở
+> đọc + xoá. Route cụ thể (`/template`) đứng trước `/:id`.
+
+**Files:**
+- Modify: `services/api/src/admin-api/resources/course-content.admin.js`
+- Test: `services/api/src/__tests__/course-content.admin.test.js`
+
+- [ ] **Step 1: Viết test thất bại**
+
+Tạo `services/api/src/__tests__/course-content.admin.test.js`:
+
+```js
+'use strict';
+
+/** API test §2–§5 (template/list/detail/delete + quyền). In-memory Mongo + supertest. */
+jest.mock('../config/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), http: jest.fn() }));
+jest.mock('../utils/audit', () => ({ auditLog: jest.fn() }));
+
+const express = require('express');
+const request = require('supertest');
+const mongoose = require('mongoose');
+const { connectDb, clearDb, disconnectDb } = require('./helpers/db');
+const User = require('../modules/user/user.model');
+const { CourseStructure } = require('../modules/course-content/course-content.model');
+const { signAccessToken } = require('../utils/jwt');
+const errorHandler = require('../middlewares/errorHandler');
+
+const oid = () => new mongoose.Types.ObjectId();
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/admin', require('../admin-api/_router'));
+  app.use(errorHandler);
+  return app;
+}
+async function seedUser(permissions = []) {
+  const u = await User.create({ email: `u${oid()}@t.dev`, name: 'Staff', role: 'user', permissions, isActive: true });
+  return { token: signAccessToken({ id: u._id.toString(), role: 'user' }) };
+}
+const seedCourse = (slug = 'khoa-a2') =>
+  CourseStructure.create({ slug, title: 'Khóa', status: 'ready', importedBy: oid(),
+    phases: [{ key: 'p1', title: 'P', order: 1, cefrFrom: 'A2', cefrTo: 'B1',
+      modules: [{ key: 'm1', title: 'M', order: 1, category: 'grammar',
+        lessons: [{ key: 'l1', title: 'L', order: 1, theory: 't', exercises: [] }] }] }] });
+
+let app;
+beforeAll(async () => { await connectDb(); await CourseStructure.init(); app = buildApp(); });
+afterEach(async () => { await clearDb(); jest.clearAllMocks(); });
+afterAll(disconnectDb);
+
+const auth = (t) => ['Authorization', `Bearer ${t}`];
+
+describe('§2 GET /template', () => {
+  test('read → 200 + file xlsx', async () => {
+    const { token } = await seedUser(['coursecontent:read']);
+    const res = await request(app).get('/api/admin/course-imports/template').set(...auth(token));
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml.sheet');
+  });
+  test('thiếu quyền → 403', async () => {
+    const { token } = await seedUser([]);
+    expect((await request(app).get('/api/admin/course-imports/template').set(...auth(token))).status).toBe(403);
+  });
+});
+
+describe('§3 GET / (list)', () => {
+  test('read → 200 items, KHÔNG có phases', async () => {
+    const { token } = await seedUser(['coursecontent:read']);
+    await seedCourse('a'); await seedCourse('b');
+    const res = await request(app).get('/api/admin/course-imports?limit=10').set(...auth(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(2);
+    expect(res.body.data.items[0].phases).toBeUndefined();
+    expect(res.body.data.items[0].id).toBeDefined();
+  });
+  test('thiếu quyền → 403', async () => {
+    const { token } = await seedUser([]);
+    expect((await request(app).get('/api/admin/course-imports').set(...auth(token))).status).toBe(403);
+  });
+});
+
+describe('§4 GET /:id (detail)', () => {
+  test('read → 200 cả cây', async () => {
+    const { token } = await seedUser(['coursecontent:read']);
+    const c = await seedCourse();
+    const res = await request(app).get(`/api/admin/course-imports/${c._id}`).set(...auth(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.phases[0].modules[0].lessons[0].key).toBe('l1');
+  });
+  test('id không tồn tại → 404', async () => {
+    const { token } = await seedUser(['coursecontent:read']);
+    expect((await request(app).get(`/api/admin/course-imports/${oid()}`).set(...auth(token))).status).toBe(404);
+  });
+});
+
+describe('§5 DELETE /:id', () => {
+  test('write-only (không delete/manage) → 403, không xoá', async () => {
+    const { token } = await seedUser(['coursecontent:write']);
+    const c = await seedCourse();
+    expect((await request(app).delete(`/api/admin/course-imports/${c._id}`).set(...auth(token))).status).toBe(403);
+    expect(await CourseStructure.countDocuments()).toBe(1);
+  });
+  test('manage → 200 deleted, giải phóng slug', async () => {
+    const { token } = await seedUser(['coursecontent:manage']);
+    const c = await seedCourse('khoa-x');
+    const res = await request(app).delete(`/api/admin/course-imports/${c._id}`).set(...auth(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ id: String(c._id), deleted: true });
+    expect(await CourseStructure.exists({ slug: 'khoa-x' })).toBeNull();
+  });
+  test('id không tồn tại → 404', async () => {
+    const { token } = await seedUser(['coursecontent:manage']);
+    expect((await request(app).delete(`/api/admin/course-imports/${oid()}`).set(...auth(token))).status).toBe(404);
+  });
+});
+```
+
+- [ ] **Step 2: Chạy test — xác nhận FAIL**
+
+Run:
+```bash
+cd services/api && npx jest course-content.admin -i
+```
+Expected: FAIL — các route `/template`, `/`, `/:id`, DELETE chưa tồn tại (404/không khớp).
+
+- [ ] **Step 3: Thêm §2–§5 vào `course-content.admin.js`**
+
+Thêm import ở đầu file (sau các require hiện có):
+
+```js
+const { Types } = require('mongoose');
+const { CourseStructure } = require('../../modules/course-content/course-content.model');
+```
+
+Thêm các route sau (đặt **sau** route `/_/import`, **trước** `module.exports`; `/template` phải trước `/:id`):
+
+```js
+// §2 — Tải template .xlsx (dựng bằng exceljs).
+router.get('/template', verifyToken, verifyPermission(PERMISSIONS.COURSECONTENT_READ), asyncHandler(async (req, res) => {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Course');
+  ws.addRow(['Level', 'Key', 'Title', 'Type', 'RefId', 'CefrFrom', 'CefrTo', 'Category', 'Content', 'VideoUrl', 'AudioUrl', 'Note']);
+  ws.addRow(['ROADMAP', 'khoa-mau', 'Khóa mẫu', '', '', '', '', '', 'Giới thiệu khóa', '', '', '']);
+  ws.addRow(['PHASE', 'p1', 'Chặng 1', '', '', 'A2', 'B1', '', '', '', '', 'IELTS 5.0→6.0']);
+  ws.addRow(['MODULE', 'm1', 'Ngữ pháp', '', '', '', '', 'grammar', '', '', '', '']);
+  ws.addRow(['LESSON', 'l1', 'Bài 1', '', '', '', '', '', '# Lý thuyết', 'https://cdn/v.mp4', 'https://cdn/a.mp3', '']);
+  ws.addRow(['EXERCISE', '', '', 'ipa', 'L1', '', '', '', '', '', '', '']);
+  const buf = await wb.xlsx.writeBuffer();
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="course-content-template.xlsx"');
+  res.status(HTTP.OK).send(Buffer.from(buf));
+}));
+
+// §3 — Liệt kê khóa (phân trang, projection — KHÔNG trả cả cây).
+router.get('/', verifyToken, verifyPermission(PERMISSIONS.COURSECONTENT_READ), asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+  const query = {};
+  if (req.query.q) {
+    const rx = new RegExp(String(req.query.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    query.$or = [{ slug: rx }, { title: rx }];
+  }
+  const [rows, total] = await Promise.all([
+    CourseStructure.find(query).select('slug title status createdAt')
+      .sort(String(req.query.sort || '-createdAt')).skip((page - 1) * limit).limit(limit).lean(),
+    CourseStructure.countDocuments(query),
+  ]);
+  const items = rows.map((d) => ({ id: String(d._id), slug: d.slug, title: d.title, status: d.status, createdAt: d.createdAt }));
+  res.status(HTTP.OK).json({ data: { items, total, page, limit } });
+}));
+
+// §4 — Chi tiết 1 khóa (cả cây).
+router.get('/:id', verifyToken, verifyPermission(PERMISSIONS.COURSECONTENT_READ), asyncHandler(async (req, res) => {
+  if (!Types.ObjectId.isValid(req.params.id)) throw new ApiError(HTTP.NOT_FOUND, 'Not found');
+  const doc = await CourseStructure.findById(req.params.id).lean();
+  if (!doc) throw new ApiError(HTTP.NOT_FOUND, 'Not found');
+  doc.id = String(doc._id); delete doc._id; delete doc.__v;
+  res.status(HTTP.OK).json({ data: doc });
+}));
+
+// §5 — Xoá cứng (giải phóng slug cho re-import — Q4). Chỉ coursecontent:delete/manage.
+router.delete('/:id', verifyToken, verifyPermission(PERMISSIONS.COURSECONTENT_DELETE), asyncHandler(async (req, res) => {
+  if (!Types.ObjectId.isValid(req.params.id)) throw new ApiError(HTTP.NOT_FOUND, 'Not found');
+  const doc = await CourseStructure.findByIdAndDelete(req.params.id);
+  if (!doc) throw new ApiError(HTTP.NOT_FOUND, 'Not found');
+  auditLog('admin.command.executed', { adminUser: req.user.id, command: 'coursecontent.delete', target: String(doc._id), ip: req.ip });
+  res.status(HTTP.OK).json({ data: { id: String(doc._id), deleted: true } });
+}));
+```
+
+- [ ] **Step 4: Chạy test — xác nhận PASS**
+
+Run:
+```bash
+cd services/api && npx jest course-content.admin -i
+```
+Expected: 8 test PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd services/api && git add src/admin-api/resources/course-content.admin.js src/__tests__/course-content.admin.test.js
+git commit -m "feat(admin): course-imports template/list/detail/delete endpoints"
+```
+
+---
+
+## Task 8: Trang Import trên `exe-admin` (cross-repo consumer)
 
 > Repo khác (`exe-admin`, Next.js) — không có jest backend; verify bằng chạy dev + smoke thủ công. Deploy SAU
 > `exe-api` (design §11). Contract: `specs/course-content-import/contracts/admin-course-import.md`.
@@ -1255,7 +1472,9 @@ export interface ImportError {
   refId?: string;
 }
 
-/** POST /admin/course-imports/_/import — multipart. Trả summary; ném lỗi mang errors[] để UI liệt kê. */
+export interface CourseRow { id: string; slug: string; title: string; status: string; createdAt: string; }
+
+/** §1 POST /_/import — multipart. Trả summary; ném lỗi mang errors[] để UI liệt kê. */
 export async function importCourse(file: File): Promise<ImportSummary> {
   const form = new FormData();
   form.append("file", file);
@@ -1266,26 +1485,57 @@ export async function importCourse(file: File): Promise<ImportSummary> {
   );
   return data.data.summary;
 }
+
+/** §2 GET /template — tải file mẫu .xlsx (blob). */
+export async function downloadTemplate(): Promise<Blob> {
+  const { data } = await apiClient.get("/admin/course-imports/template", { responseType: "blob" });
+  return data as Blob;
+}
+
+/** §3 GET / — liệt kê khóa đã import. */
+export async function listCourses(params: { page?: number; limit?: number; q?: string } = {}) {
+  const { data } = await apiClient.get<{ data: { items: CourseRow[]; total: number; page: number; limit: number } }>(
+    "/admin/course-imports", { params }
+  );
+  return data.data;
+}
+
+/** §4 GET /:id — chi tiết cả cây. */
+export async function getCourse(id: string) {
+  const { data } = await apiClient.get<{ data: Record<string, unknown> }>(`/admin/course-imports/${id}`);
+  return data.data;
+}
+
+/** §5 DELETE /:id — xoá khóa (để sửa & import lại). */
+export async function deleteCourse(id: string): Promise<void> {
+  await apiClient.delete(`/admin/course-imports/${id}`);
+}
 ```
 
-- [ ] **Step 2: Trang Import (upload + hiển thị summary/lỗi)**
+- [ ] **Step 2: Trang Import + quản lý khóa**
 
-Tạo `exe-admin/src/app/(admin)/course-import/page.tsx`: form chọn file `.xlsx` → gọi `importCourse` →
-- thành công: hiển thị `counts` (số Chặng/Chuyên đề/Bài học) — AC-5.
-- thất bại: đọc `err.response.data.errors[]` render bảng (dòng + message); nếu không có `errors[]` thì hiển thị
-  `err.response.data.message` (không hiện "import failed" chung chung) — AC-5.
+Tạo `exe-admin/src/app/(admin)/course-import/page.tsx` gồm:
+- **Nút "Tải template"** → `downloadTemplate()` → save blob thành `.xlsx` (AC-8).
+- **Form upload** `.xlsx` → `importCourse` →
+  - thành công: hiển thị `counts` (số Chặng/Chuyên đề/Bài học) — AC-5; refresh danh sách.
+  - thất bại: đọc `err.response.data.errors[]` render bảng (dòng + message); nếu không có `errors[]` thì hiển thị
+    `err.response.data.message` (không hiện "import failed" chung chung) — AC-5.
+- **Danh sách khóa đã import** (`listCourses`) — bảng slug/title/status/ngày (AC-9); mỗi hàng có **nút Xoá**
+  (`deleteCourse`, xác nhận trước) để sửa & import lại (AC-11). (Xem chi tiết cây qua `getCourse` — tuỳ chọn.)
 
-(Component theo pattern UI có sẵn trong `src/components/`; dùng `useState` cho `summary`/`errors`/`loading`.)
+(Component theo pattern UI có sẵn trong `src/components/`; `useState` cho `summary`/`errors`/`loading`/`courses`.)
 
 - [ ] **Step 3: Smoke test thủ công**
 
-Run (cần `exe-api` chạy + tài khoản có `coursecontent:write`):
+Run (cần `exe-api` chạy + tài khoản có `coursecontent:manage`):
 ```bash
 cd exe-admin && npm run dev
 ```
 Mở `/course-import`, thử:
-- upload file `.xlsx` hợp lệ (mọi IPA ref đã publish) → thấy tóm tắt counts đúng.
-- upload file có ID sai → thấy danh sách lỗi kèm số dòng, không có bản ghi nào được tạo (kiểm tra lại DB).
+- Tải template → mở được file `.xlsx` đúng cột.
+- Upload file `.xlsx` hợp lệ (mọi IPA ref đã publish) → thấy tóm tắt counts đúng + khóa xuất hiện trong danh sách.
+- Upload file có ID sai → thấy danh sách lỗi kèm số dòng, không có bản ghi nào được tạo.
+- Xoá 1 khóa → biến mất khỏi danh sách; import lại cùng file → thành công (slug đã giải phóng).
 Expected: đúng như trên.
 
 - [ ] **Step 4: Commit (trong repo exe-admin)**
@@ -1297,7 +1547,7 @@ git commit -m "feat(course-import): admin Import page for static course .xlsx"
 
 ---
 
-## Task 8: Chạy full suite + Self-Review
+## Task 9: Chạy full suite + Self-Review
 
 **Files:** (không sửa code) — verify + đối chiếu AC
 
@@ -1307,7 +1557,7 @@ Run:
 ```bash
 cd services/api && npx jest course-content -i
 ```
-Expected: ALL PASS (model + parser + references + service + import.api).
+Expected: ALL PASS (model + parser + references + service + import.api + admin).
 
 - [ ] **Step 2: Chạy full suite — không hồi quy**
 
@@ -1338,7 +1588,7 @@ Nhắc người phụ trách deploy (design §11):
 - **AC-2** (từ chối sai cấu trúc, lỗi chỉ rõ dòng, không ghi) → Task 3 (ORPHAN + row) + Task 5 (`validateCourse` EMPTY_CHILDREN). ✅
 - **AC-3** (từ chối exercise ID không tồn tại, liệt kê đúng ID) → Task 4 (REFERENCE_NOT_FOUND) + Task 6 (API errors[]). ✅
 - **AC-4** (all-or-nothing) → Task 5 (`countDocuments === 0` khi lỗi) + single-insert model Task 2. ✅
-- **AC-5** (hiển thị kết quả trên exe-admin) → Task 7 (page render summary + errors[]). ✅
+- **AC-5** (hiển thị kết quả trên exe-admin) → Task 8 (page render summary + errors[]). ✅
 - **AC-6** (lưu CEFR Chặng + category Chuyên đề — IS-9) → Task 2 (model field + enum) + Task 3 (parser cột F/G/H/L) + Task 5 (validate INVALID_CEFR/INVALID_CATEGORY). ✅
 - **AC-7** (theory/video/audio + Bài học lý thuyết-thuần — IS-10) → Task 2 (model field, exercises không bắt buộc) + Task 3 (parser cột I/J/K) + Task 5 (EMPTY_LESSON thay vì bắt ≥1 exercise). ✅
 - **AC-E1** (file không parse được → lỗi rõ, không 500) → Task 3 (PARSE_FAILED). ✅
@@ -1350,9 +1600,13 @@ Nhắc người phụ trách deploy (design §11):
 - **AC-E7** (type quiz — hoãn Phase 2) → Task 2 (enum model) + Task 4 (UNSUPPORTED_EXERCISE_TYPE). ✅
 - **AC-E8** (Bài học rỗng hoàn toàn — IS-10) → Task 5 (EMPTY_LESSON). ✅
 - **AC-E9** (metadata/URL sai — IS-9/IS-10) → Task 5 (INVALID_CEFR / INVALID_CATEGORY / INVALID_URL). ✅
-- **NFR Bảo mật** (permission platform-only, centerId từ server) → Task 1 (permission, không vào CENTER) + Task 5 (`centerId: null`) + Task 6 (403 test). ✅
-- **NFR Audit** (audit hook mỗi import) → Task 6 (`auditLog` gọi với `coursecontent.import`). ✅
-- **NFR Hiệu năng** (đồng bộ, ≤5MB) → Task 6 (multer 5MB) + Task 8 §3 (nginx note). ✅
+- **AC-8** (tải template §2) → Task 7 (GET /template) + Task 8 (nút tải). ✅
+- **AC-9** (list khóa §3) → Task 7 (GET / — projection, không cả cây) + Task 8 (bảng danh sách). ✅
+- **AC-10** (detail §4) → Task 7 (GET /:id — cả cây, 404). ✅
+- **AC-11** (xoá & import lại §5, Q4) → Task 7 (DELETE hard, 403 write-only, giải phóng slug) + Task 8 (nút xoá). ✅
+- **NFR Bảo mật** (permission platform-only, centerId từ server) → Task 1 (permission, không vào CENTER) + Task 5 (`centerId: null`) + Task 6/7 (403 test). ✅
+- **NFR Audit** (audit hook mỗi mutation) → Task 6 (`coursecontent.import`) + Task 7 (`coursecontent.delete`). ✅
+- **NFR Hiệu năng** (đồng bộ, ≤5MB) → Task 6 (multer 5MB) + Task 9 §3 (nginx note). ✅
 
 **Placeholder scan:** không có TBD/TODO; mọi step có code/command cụ thể. ✅
 
@@ -1368,7 +1622,11 @@ Nhắc người phụ trách deploy (design §11):
 - Error code strings (`IMPORT_VALIDATION_FAILED`, `PARSE_FAILED`, `EMPTY_COURSE_FILE`, `UNSUPPORTED_EXERCISE_TYPE`,
   `INVALID_FILE_TYPE`) khớp giữa constants (Task 1), service/parser/middleware và assert trong test. ✅
 
+- `PERMISSIONS.COURSECONTENT_DELETE` = `'coursecontent:delete'` (Task 1) khớp `verifyPermission` §5 (Task 7) và
+  test 403-write-only / 200-manage (Task 7). ✅
+
 **Ghi chú deviation so với design (đã cân nhắc):**
-- Endpoint Import hand-mount thay vì dùng `actions` factory — lý do multer (ghi ở đầu file này + Task 6). Vẫn giữ
-  nguyên: admin-api layer, verifyPermission, delegate service, audit thủ công.
-- List/read khóa đã import **không** làm ở Phase 1 (không AC nào cần) — chuyển Phase 2 (tiêu thụ).
+- Toàn bộ endpoint hand-mount thay vì `adminResource` factory — lý do: import cần multer; và factory generic lộ
+  `POST`/`PATCH` tạo/sửa cây khóa bỏ qua validate ⇒ chỉ mở đọc + xoá. Vẫn giữ admin-api layer, verifyPermission,
+  audit thủ công.
+- §2–§5 (template/list/detail/delete) **thuộc Phase 1** (PO duyệt 2026-07-15, nâng từ Phase 2) — Task 7.
