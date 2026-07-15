@@ -49,6 +49,11 @@ Feature "Import cấu trúc khóa học tĩnh" (Phase 1) cần lưu một cây p
    định dạng sau này rẻ. Giảm thiểu rủi ro parse file: giới hạn 5MB + xử lý trong memory + không eval nội dung ô.
 7. **Phạm vi type bài tập Phase 1 = `ipa` + `talk`; `quiz` hoãn Phase 2** (Q-Quiz) — vì "quiz" chưa có nguồn nội
    dung tái dùng rõ ràng để validate tồn tại (`assessments` là phiên của user, `assessment_questions` là item lẻ).
+8. **Nội dung học đa phương thức (Hướng B, PO chốt 2026-07-15):** mỗi Chặng lưu `cefrFrom/cefrTo/goalNote`, mỗi
+   Chuyên đề lưu `category`, mỗi Bài học lưu `theory` (text/markdown) + `videoUrl` + `audioUrl`. **Media = URL,
+   KHÔNG upload/host trong luồng import** (đội học thuật tự host trên CDN/YouTube/R2). Bài học lý thuyết-thuần
+   (không bài tập) hợp lệ. Quyết định giữ import "nhẹ" (chỉ text + link) thay vì dựng hệ thống quản lý media —
+   engine bài tập cho Nghe/Đọc/Viết/Ngữ pháp/Từ vựng và host media tập trung để **phase sau**.
 
 ## Lộ trình
 

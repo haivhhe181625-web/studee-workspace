@@ -1,51 +1,89 @@
-# Contract: Admin — Import cấu trúc khóa học
+# Contract: Admin — Course Content API (import + quản lý khóa)
 
 - **Loại:** Cross-repo (api↔admin)
 - **Bên cung cấp (provider):** `api` (`exe-api`, `src/admin-api/`)
-- **Bên tiêu thụ (consumer):** `admin` (`exe-admin`, trang Import)
-- **Trạng thái:** Đã thống nhất định dạng (PO chốt Q1–Q6 + Q-Quiz) — chờ Technical Review
+- **Bên tiêu thụ (consumer):** `admin` (`exe-admin` — trang Import + màn quản lý khóa đã import)
+- **Trạng thái:** Đã thống nhất định dạng import (PO chốt Q1–Q6 + Q-Quiz + Hướng B). **Các endpoint quản lý
+  (§2–§5) là đề xuất Tech Lead nâng từ Phase 2 lên Phase 1 — chờ xác nhận ở Technical Review** (lý do: §0.3).
 
-> Endpoint là **collection-level action** của admin-api factory (`_crud.factory.js`, `collection: true` → mount
-> `/_/import`). Chain: `verifyToken → verifyPermission → courseImportUpload(multer) → asyncHandler(handler)`.
-> Handler KHÔNG business logic — delegate `course-content.service.importCourse()` (HARD RULE admin-api).
+## 0. Tổng quan
 
-## Endpoint
+### 0.1 Quy ước chung
+
+- **Base path:** `/api/admin/course-imports` (thuộc admin surface, mount trong `src/admin-api/_router.js`).
+- **Auth:** JWT user (Bearer) cho mọi endpoint — surface admin dùng JWT client, **KHÔNG** `X-Service-Key`.
+- **Envelope:** thành công `{ "data": ... }`; lỗi `{ "message": string, "code": string, "errors"?: [...] }`
+  (theo `errorHandler`). **Mọi lỗi phía client dùng HTTP 400** (repo không dùng 422); phân biệt bằng `code`.
+- **Tenant (Q5):** Phase 1 nội dung dùng chung `centerId = null`; **không** nhận `centerId` từ client. Resource
+  **không** bật `tenantScoped` ở Phase 1.
+- **Audit:** mọi mutation (import, delete) phát `admin.command.executed` qua audit hook — không lộ ra client.
+
+### 0.2 Bảng tổng quan endpoint
+
+| # | Method | Path | Permission | Phase | Mục đích |
+|---|---|---|---|---|---|
+| §1 | `POST` | `/course-imports/_/import` | `coursecontent:write` | **1 — đã chốt** | Import 1 file `.xlsx` → tạo khóa |
+| §2 | `GET` | `/course-imports/template` | `coursecontent:read` | **1 — đề xuất** | Tải template `.xlsx` chuẩn |
+| §3 | `GET` | `/course-imports` | `coursecontent:read` | **1 — đề xuất** | Liệt kê khóa đã import (phân trang) |
+| §4 | `GET` | `/course-imports/:id` | `coursecontent:read` | **1 — đề xuất** | Chi tiết 1 khóa (cả cây) |
+| §5 | `DELETE` | `/course-imports/:id` | `coursecontent:delete` | **1 — đề xuất** | Xoá 1 khóa (để sửa & import lại) |
+
+> **Thứ tự đăng ký route (quan trọng):** `/_/import` và `/template` phải mount **trước** route `/:id` của factory,
+> nếu không `:id` sẽ "nuốt" `template` (Express match `/template` thành `:id='template'`).
+
+### 0.3 Vì sao nâng §2–§5 lên Phase 1 (đề xuất Tech Lead)
+
+Bản design gốc hoãn list/read sang Phase 2. Khi rà lại plan, 4 endpoint này **cần cho Phase 1 dùng được thực
+tế**, và chi phí thấp (list/get/delete sinh sẵn từ `_crud.factory.js` — chỉ config; template là 1 GET nhỏ):
+
+- **Template (§2):** đội học thuật non-tech cần file mẫu đúng cột để điền — thiếu nó thì tính năng "để non-tech tự
+  soạn" (giá trị cốt lõi Epic 4) không trọn.
+- **List/Get (§3/§4):** sau khi import, admin cần **thấy** đã có khóa gì, và cần `id` để xoá — nếu không, admin
+  "mù" sau khi rời trang Import.
+- **Delete (§5):** vì Q4 = **từ chối trùng**, muốn sửa một khóa đã import buộc phải xoá rồi import lại. Không có
+  endpoint xoá ⇒ phải can thiệp DB thủ công (đã nêu là điểm yếu ở `design.md` §9). §5 đóng lỗ hổng này.
+
+Nếu Technical Review **không** duyệt nâng scope: giữ §1 cho Phase 1, chuyển §2–§5 sang Phase 2 (contract vẫn dùng
+lại được).
+
+---
+
+## §1. `POST /course-imports/_/import` — Import khóa *(Phase 1 — đã chốt)*
 
 ```
 POST /api/admin/course-imports/_/import
 Content-Type: multipart/form-data
 ```
 
-- **Auth:** JWT user (Bearer) — surface admin dùng JWT client, KHÔNG X-Service-Key.
-- **Permission required:** `coursecontent:write` (`coursecontent:manage` cũng qua — `manage` implies write).
+- **Permission:** `coursecontent:write` (`coursecontent:manage` cũng qua — `manage` implies write).
+- **Cài đặt:** hand-mount (KHÔNG qua factory action) vì cần multer.
+  Chain: `verifyToken → verifyPermission → courseImportUpload(multer) → asyncHandler(handler)`. Handler **không**
+  business logic — delegate `course-content.service.importCourse()` (HARD RULE admin-api) + `auditLog` thủ công.
 
-## Request
+### Request
 
 `multipart/form-data`, đúng **một** file field:
 
 | Field | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
-| `file` | file `.xlsx` (binary) | ✓ | File Excel cấu trúc khóa học theo template chuẩn. Mime: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Giới hạn **5MB** (Q6). |
+| `file` | file `.xlsx` (binary) | ✓ | Excel theo template §2. Mime `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Giới hạn **5MB** (Q6). |
 
-- **KHÔNG** nhận `centerId` từ form — Phase 1 nội dung dùng chung, `centerId = null` phía server (Q5).
-- Cấu trúc file Excel theo `<API_REPO>/docs/content_ingestion_schema.md` (cột `Level` dẫn dắt:
-  ROADMAP/PHASE/MODULE/LESSON/EXERCISE). **Khác biệt Phase 1:** dòng `EXERCISE` mang **ID/mã bài tập tham chiếu**
-  (`ipa` = mã IPA lesson đã publish; `talk` = scenario id) + `type ∈ {ipa, talk}`. `quiz` **chưa hỗ trợ** (Phase
-  2). Template chuẩn `.xlsx` chốt với đội học thuật ở giai đoạn tasks.
+Cấu trúc file: cột `Level` dẫn dắt (ROADMAP/PHASE/MODULE/LESSON/EXERCISE). **Cột (Hướng B):**
+`A Level | B Key | C Title | D Type | E RefId | F CefrFrom | G CefrTo | H Category | I Content(desc/theory) |
+J VideoUrl | K AudioUrl | L Note` (chi tiết ý nghĩa: `design.md` §3.2). Dòng `EXERCISE` mang **ID tham chiếu** +
+`type ∈ {ipa, talk}` (`quiz` chưa hỗ trợ); Bài học có thể chỉ có lý thuyết/video/audio.
 
-## Response — thành công
-
-`200 OK`
+### Response — 200 thành công
 
 ```json
 {
   "data": {
     "summary": {
-      "id": "665f...",
+      "id": "665f0a...",
       "slug": "tieng-anh-san-bay-a2",
       "title": "Tiếng Anh Sân Bay",
       "status": "ready",
-      "counts": { "phases": 1, "modules": 1, "lessons": 1, "exercises": 2 }
+      "counts": { "phases": 3, "modules": 8, "lessons": 24, "exercises": 40 }
     }
   }
 }
@@ -53,76 +91,246 @@ Content-Type: multipart/form-data
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| `data.summary.id` | String | `_id` khóa vừa tạo |
+| `data.summary.id` | String | `_id` khóa vừa tạo (dùng cho §4/§5) |
 | `data.summary.slug` | String | Định danh khóa |
 | `data.summary.status` | String | `"ready"` (IS-6) |
-| `data.summary.counts` | Object | Số Chặng/Chuyên đề/Bài học (+bài tập) — **khớp nội dung file** (AC-1) |
+| `data.summary.counts` | Object | Số Chặng/Chuyên đề/Bài học/bài tập — **khớp file** (AC-1) |
 
 FE hiển thị `counts` như tóm tắt thành công (AC-5).
 
-## Response — lỗi
+### Response — lỗi
 
-Body chung theo `errorHandler`: `{ "message": string, "code": string, "errors"?: [...] }`. **Mọi lỗi phía client
-dùng HTTP 400** (quyết định PO + convention repo không dùng 422); phân biệt bằng `code`.
-
-| Mã HTTP | error code | Khi nào | AC |
+| Mã | error code | Khi nào | AC |
 |---|---|---|---|
-| 400 | `PARSE_FAILED` | File `.xlsx` hỏng/không đọc được | AC-E1 |
-| 400 | `FILE_TOO_LARGE` | Vượt 5MB (multer) | Q6 |
+| 400 | `PARSE_FAILED` | `.xlsx` hỏng/không đọc được | AC-E1 |
 | 400 | `INVALID_FILE_TYPE` | Không phải `.xlsx` | Q6 |
+| 400 | `FILE_TOO_LARGE` | Vượt 5MB | Q6 |
 | 400 | `EMPTY_COURSE_FILE` | Parse được nhưng không có tầng nào | AC-E2 |
-| 400 | `IMPORT_VALIDATION_FAILED` | Lỗi cấu trúc / trùng key nội bộ / trùng khóa DB / ID không tồn tại / ID chưa publish / type `quiz` — kèm `errors[]` | AC-2, AC-3, AC-E3, AC-E5, AC-E6, Q-Quiz |
+| 400 | `IMPORT_VALIDATION_FAILED` | Lỗi cấu trúc/tham chiếu/trùng — kèm `errors[]` (§6) | AC-2/3, AC-E3/E5/E6/E8/E9, Q-Quiz |
 | 401 | `NOT_AUTHENTICATED` | Thiếu/sai token | — |
 | 403 | `PERMISSION_DENIED` | Thiếu `coursecontent:write` | AC-E4 |
 
-`errors[]` (FE render danh sách lỗi cụ thể — AC-5/IS-7), mỗi phần tử:
+**Bất biến all-or-nothing (AC-4/IS-5):** với mọi phản hồi lỗi, **KHÔNG** tạo bản ghi nào.
+
+---
+
+## §2. `GET /course-imports/template` — Tải template Excel *(Phase 1 — đề xuất)*
+
+```
+GET /api/admin/course-imports/template
+```
+
+- **Permission:** `coursecontent:read`.
+- **Cài đặt:** hand-mount, trả file `.xlsx` sinh sẵn (server dựng bằng `exceljs` từ định nghĩa cột, hoặc đọc 1
+  file mẫu tĩnh trong repo). Gồm: **dòng header 12 cột** + **vài dòng ví dụ** (1 ROADMAP→PHASE→MODULE→LESSON→
+  EXERCISE mẫu) + (tuỳ chọn) 1 sheet "Hướng dẫn" liệt kê enum hợp lệ (CEFR, category, type).
+
+### Response — 200
+
+- **Headers:** `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
+  `Content-Disposition: attachment; filename="course-content-template.xlsx"`.
+- **Body:** binary `.xlsx`.
+
+### Response — lỗi
+
+| Mã | error code | Khi nào |
+|---|---|---|
+| 401 | `NOT_AUTHENTICATED` | Thiếu/sai token |
+| 403 | `PERMISSION_DENIED` | Thiếu `coursecontent:read` |
+
+---
+
+## §3. `GET /course-imports` — Liệt kê khóa đã import *(Phase 1 — đề xuất)*
+
+```
+GET /api/admin/course-imports?page=1&limit=20&q=<từ khóa>&sort=-createdAt
+```
+
+- **Permission:** `coursecontent:read`.
+- **Cài đặt:** `adminResource` factory (config-only) trên model `CourseStructure`.
+
+### Query params
+
+| Param | Kiểu | Mặc định | Ghi chú |
+|---|---|---|---|
+| `page` | Number | 1 | Trang |
+| `limit` | Number | 20 | ≤ 100 (giới hạn factory) |
+| `q` | String | — | Tìm theo `slug`/`title` (regex, factory `searchFields`) |
+| `sort` | String | `-createdAt` | vd `title`, `-createdAt` |
+
+### Response — 200
 
 ```json
 {
-  "code": "REFERENCE_NOT_PUBLISHED",
-  "message": "Dòng 45: bài tập IPA 'L99' chưa được publish",
-  "row": 45,
-  "refType": "ipa",
-  "refId": "L99"
+  "data": {
+    "items": [
+      { "id": "665f0a...", "slug": "tieng-anh-san-bay-a2", "title": "Tiếng Anh Sân Bay",
+        "status": "ready", "createdAt": "2026-07-15T10:00:00.000Z" }
+    ],
+    "total": 1, "page": 1, "limit": 20
+  }
 }
 ```
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `EMPTY_CHILDREN` |
+| `items[]` | Array | Projection `listFields` = `slug, title, status, createdAt` (KHÔNG trả cả cây `phases` ở list) |
+| `total` / `page` / `limit` | Number | Phân trang |
+
+> `counts` KHÔNG có trong list (tránh tính toán mỗi hàng); lấy ở §4 hoặc từ `summary` lúc import.
+
+### Response — lỗi: 401 `NOT_AUTHENTICATED` · 403 `PERMISSION_DENIED`.
+
+---
+
+## §4. `GET /course-imports/:id` — Chi tiết 1 khóa *(Phase 1 — đề xuất)*
+
+```
+GET /api/admin/course-imports/:id
+```
+
+- **Permission:** `coursecontent:read`.
+- **Cài đặt:** `adminResource` factory `GET /:id`.
+
+### Response — 200
+
+Trả **cả cây** (document là 1 khối):
+
+```json
+{
+  "data": {
+    "id": "665f0a...",
+    "slug": "tieng-anh-san-bay-a2",
+    "title": "Tiếng Anh Sân Bay",
+    "description": "...",
+    "status": "ready",
+    "centerId": null,
+    "phases": [
+      { "key": "p1", "title": "Chặng 1", "order": 1, "cefrFrom": "A2", "cefrTo": "B1", "goalNote": "IELTS 5.0→6.0",
+        "modules": [
+          { "key": "m1", "title": "Ngữ pháp", "order": 1, "category": "grammar",
+            "lessons": [
+              { "key": "l1", "title": "Bài 1", "order": 1, "theory": "# ...",
+                "videoUrl": "https://...", "audioUrl": "https://...",
+                "exercises": [ { "type": "ipa", "refId": "L1", "order": 1 } ] }
+            ] }
+        ] }
+    ],
+    "sourceMeta": { "filename": "course-san-bay.xlsx", "nodeCount": 76, "format": "xlsx" },
+    "importedBy": "665e...",
+    "createdAt": "2026-07-15T10:00:00.000Z"
+  }
+}
+```
+
+### Response — lỗi: 401 · 403 · **404 `NOT_FOUND`** (id không tồn tại/sai định dạng).
+
+---
+
+## §5. `DELETE /course-imports/:id` — Xoá 1 khóa *(Phase 1 — đề xuất)*
+
+```
+DELETE /api/admin/course-imports/:id
+```
+
+- **Permission:** `coursecontent:delete` (chỉ `coursecontent:manage` thoả — bar cao vì thao tác phá huỷ; quyền
+  `write` để import KHÔNG đủ để xoá).
+- **Cài đặt:** `adminResource` factory DELETE với **`allowHardDelete: true`** — **xoá cứng**.
+
+> **Vì sao xoá cứng (không soft-delete):** để `slug` được giải phóng, cho phép **import lại** khóa đã sửa (Q4 từ
+> chối trùng dựa trên `slug` unique). Soft-delete sẽ giữ `slug` trong DB ⇒ import lại vẫn `ALREADY_EXISTS`. Phase
+> 1 chưa có consumer (learner Phase 2) nên xoá cứng an toàn. **Đánh đổi:** Phase 2 (khi có consumer) nên cân nhắc
+> chuyển sang soft-delete + versioning + loại `slug` archived khỏi kiểm tra trùng.
+
+### Response — 200
+
+```json
+{ "data": { "id": "665f0a...", "deleted": true } }
+```
+
+### Response — lỗi: 401 · 403 (thiếu `coursecontent:delete`/`manage`) · **404 `NOT_FOUND`**.
+
+Audit: phát `admin.command.executed` (`coursecontent.delete`, target = id) qua factory hook.
+
+---
+
+## §6. Schema `errors[]` (dùng chung cho §1)
+
+Mỗi phần tử (FE render danh sách lỗi cụ thể — AC-5/IS-7):
+
+```json
+{ "code": "REFERENCE_NOT_PUBLISHED", "message": "Dòng 45: bài tập IPA 'L99' chưa được publish",
+  "row": 45, "refType": "ipa", "refId": "L99" }
+```
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` |
 | `message` | String | Mô tả tiếng Việt, kèm số dòng |
 | `row` | Number | Số dòng Excel để đội học thuật tự sửa |
-| `refType` / `refId` | String | Chỉ có với lỗi tham chiếu (AC-3/AC-E6) |
+| `refType` / `refId` | String? | Chỉ có với lỗi tham chiếu (AC-3/AC-E6) |
 
-**Bất biến all-or-nothing (AC-4/IS-5):** với mọi phản hồi lỗi, hệ thống **KHÔNG tạo bản ghi nào** —
-`course_structures` sau lần import lỗi giống hệt trước đó.
+> Các `code` con này KHÔNG khai báo trong `error-codes.js` — chỉ top-level `IMPORT_VALIDATION_FAILED` là hằng.
 
-## Versioning / breaking change
+## §7. Permission & scope
 
-N/A — contract mới hoàn toàn (chưa có consumer live).
+| Permission | Endpoint | Ghi chú |
+|---|---|---|
+| `coursecontent:read` | §2, §3, §4 | Xem template/list/detail |
+| `coursecontent:write` | §1 | Import |
+| `coursecontent:delete` | §5 | Xoá (chỉ ai có `:delete` hoặc `:manage`) |
+| `coursecontent:manage` | tất cả | Implies read/write/delete (`hasPermission`) |
 
-## Sequencing triển khai (cross-repo)
+- Thêm cả 4 hằng `COURSECONTENT_READ/WRITE/DELETE/MANAGE` vào `src/constants/permissions.js` (nguồn sự thật duy
+  nhất) — **[cập nhật so với design cũ: bổ sung `COURSECONTENT_DELETE`]**. Phase 1 chỉ cấp cho platform admin/đội
+  học thuật, **KHÔNG** vào `CENTER_PERMISSIONS` (Q5).
+- Tenant từ server (`centerId=null` Phase 1), không tin `req.body` (5 rules auth — `docs/api/CONVENTIONS.md` §5).
+
+## §8. Versioning / breaking change
+
+N/A — contract mới hoàn toàn (chưa có consumer live). Khi Technical Review chốt scope §2–§5, cập nhật cột "Phase"
+ở §0.2 và nâng Trạng thái lên "Đã thống nhất 2 bên".
+
+## §9. Sequencing triển khai (cross-repo)
 
 `.ai/workflows/release-workflow.md` §3 — **provider trước consumer**:
 
-1. Deploy `exe-api`: dependency `exceljs` + model + service + admin resource + permission `coursecontent:*`, và
-   **seed permission** cho tài khoản đội học thuật/platform admin (nếu không → 403).
-2. Deploy `exe-admin`: trang Import + `course-content.service.ts`.
+1. Deploy `exe-api`: `exceljs` + model + service + admin resource (import hand-mount + factory list/get/delete +
+   template) + permission `coursecontent:*` (gồm `:delete`), và **seed permission** cho tài khoản đội học thuật/
+   platform admin (thiếu → 403).
+2. Deploy `exe-admin`: trang Import + màn quản lý khóa (list/detail/delete) + `course-content.service.ts`.
 
-## Ví dụ gọi thực tế
+## §10. Ngoài phạm vi contract này
+
+- **API learner tiêu thụ khóa (đọc lộ trình, render bài học, unlock)** — thuộc **Phase 2**, ranh giới **api↔web**
+  (repo `exe-web`), sẽ có contract riêng `contracts/web-course-consume.md` khi tới Phase 2. KHÔNG thuộc api↔admin.
+- **Sửa (edit) khóa đã import qua UI, versioning** — Phase 1 chỉ có import + xoá-rồi-import-lại (Q4). Edit/version
+  là nhu cầu sau.
+- **Upload/host media (video/audio) tập trung** — Hướng B chỉ lưu URL; host media để phase sau.
+
+## §11. Ví dụ gọi thực tế
 
 ```bash
+# Import
 curl -X POST "$API/api/admin/course-imports/_/import" \
   -H "Authorization: Bearer $ADMIN_JWT" \
   -F "file=@course-san-bay.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+# → { "data": { "summary": { "id": "665f...", "status": "ready", "counts": { "phases": 3, ... } } } }
 
-# Thành công:
-# { "data": { "summary": { "slug": "...", "status": "ready", "counts": { "phases": 1, ... } } } }
+# Tải template
+curl -X GET "$API/api/admin/course-imports/template" -H "Authorization: Bearer $ADMIN_JWT" -o template.xlsx
 
-# Lỗi validate (400):
+# List
+curl -X GET "$API/api/admin/course-imports?page=1&limit=20" -H "Authorization: Bearer $ADMIN_JWT"
+
+# Detail
+curl -X GET "$API/api/admin/course-imports/665f0a..." -H "Authorization: Bearer $ADMIN_JWT"
+
+# Delete (để import lại bản sửa)
+curl -X DELETE "$API/api/admin/course-imports/665f0a..." -H "Authorization: Bearer $ADMIN_JWT"
+# → { "data": { "id": "665f0a...", "deleted": true } }
+
+# Lỗi validate import (400):
 # { "message": "Import validation failed", "code": "IMPORT_VALIDATION_FAILED",
-#   "errors": [ { "code": "ALREADY_EXISTS", "row": 45, "message": "Dòng 45: khóa 'mod-01' đã tồn tại" } ] }
-
-# Thiếu quyền (403):
-# { "message": "Permission denied", "code": "PERMISSION_DENIED" }
+#   "errors": [ { "code": "ALREADY_EXISTS", "row": 2, "message": "Dòng 2: khóa 'tieng-anh-san-bay-a2' đã tồn tại" } ] }
 ```
