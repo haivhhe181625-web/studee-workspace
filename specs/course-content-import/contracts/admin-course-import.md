@@ -71,10 +71,12 @@ Content-Type: multipart/form-data
 |---|---|---|---|
 | `file` | file `.xlsx` (binary) | ✓ | Excel theo template §2. Mime `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Giới hạn **5MB** (Q6). |
 
-Cấu trúc file: cột `Level` dẫn dắt (ROADMAP/PHASE/MODULE/LESSON/EXERCISE). **Cột (Hướng B):**
-`A Level | B Key | C Title | D Type | E RefId | F CefrFrom | G CefrTo | H Category | I Content(desc/theory) |
-J VideoUrl | K AudioUrl | L Note` (chi tiết ý nghĩa: `design.md` §3.2). Dòng `EXERCISE` mang **ID tham chiếu** +
-`type ∈ {ipa, talk}` (`quiz` chưa hỗ trợ); Bài học có thể chỉ có lý thuyết/video/audio.
+Cấu trúc file: cột `Level` dẫn dắt (ROADMAP/PHASE/MODULE/LESSON/**MEDIA**/EXERCISE). **Cột (Hướng B + BR
+feature-spec):** `A Level | B Key | C Title | D Type | E RefId/Url | F CefrFrom | G CefrTo | H Category |
+I Content(desc/theory) | J Thumbnail | K Note` (chi tiết ý nghĩa: `design.md` §3.2). Dòng `EXERCISE` mang **ID tham
+chiếu** + `type ∈ {ipa, talk}` (`quiz` chưa hỗ trợ); dòng `MEDIA` mang **URL** video/audio (`type ∈ {video, audio}`,
+URL ở cột `E`) — mỗi Bài học có thể có **nhiều** dòng `MEDIA` (danh sách `media_urls`). Bài học có thể chỉ có lý
+thuyết + media (không bài tập). Media & `Thumbnail` chỉ nhận **URL** — **cấm Base64/`data:`** (§5.1).
 
 ### Response — 200 thành công
 
@@ -86,7 +88,7 @@ J VideoUrl | K AudioUrl | L Note` (chi tiết ý nghĩa: `design.md` §3.2). Dò
       "slug": "tieng-anh-san-bay-a2",
       "title": "Tiếng Anh Sân Bay",
       "status": "ready",
-      "counts": { "phases": 3, "modules": 8, "lessons": 24, "exercises": 40 }
+      "counts": { "phases": 3, "modules": 8, "lessons": 24, "media": 30, "exercises": 40 }
     }
   }
 }
@@ -96,8 +98,8 @@ J VideoUrl | K AudioUrl | L Note` (chi tiết ý nghĩa: `design.md` §3.2). Dò
 |---|---|---|
 | `data.summary.id` | String | `_id` khóa vừa tạo (dùng cho §4/§5) |
 | `data.summary.slug` | String | Định danh khóa |
-| `data.summary.status` | String | `"ready"` (IS-6) |
-| `data.summary.counts` | Object | Số Chặng/Chuyên đề/Bài học/bài tập — **khớp file** (AC-1) |
+| `data.summary.status` | String | `"ready"` (IS-6) — import Phase 1 luôn tạo `ready` |
+| `data.summary.counts` | Object | Số Chặng/Chuyên đề/Bài học/media/bài tập — **khớp file** (AC-1) |
 
 FE hiển thị `counts` như tóm tắt thành công (AC-5).
 
@@ -125,8 +127,9 @@ GET /api/admin/course-imports/template
 
 - **Permission:** `coursecontent:read`.
 - **Cài đặt:** hand-mount, trả file `.xlsx` sinh sẵn (server dựng bằng `exceljs` từ định nghĩa cột, hoặc đọc 1
-  file mẫu tĩnh trong repo). Gồm: **dòng header 12 cột** + **vài dòng ví dụ** (1 ROADMAP→PHASE→MODULE→LESSON→
-  EXERCISE mẫu) + (tuỳ chọn) 1 sheet "Hướng dẫn" liệt kê enum hợp lệ (CEFR, category, type).
+  file mẫu tĩnh trong repo). Gồm: **dòng header 11 cột** (A Level … K Note) + **vài dòng ví dụ** (1 ROADMAP→PHASE→
+  MODULE→LESSON→MEDIA→EXERCISE mẫu, có `thumbnail` + ≥1 dòng `MEDIA`) + (tuỳ chọn) 1 sheet "Hướng dẫn" liệt kê enum
+  hợp lệ (CEFR, category, media type video/audio, exercise type ipa/talk) và ghi chú **cấm Base64**.
 
 ### Response — 200
 
@@ -206,6 +209,7 @@ Trả **cả cây** (document là 1 khối):
     "slug": "tieng-anh-san-bay-a2",
     "title": "Tiếng Anh Sân Bay",
     "description": "...",
+    "thumbnail": "https://cdn/cover.png",
     "status": "ready",
     "centerId": null,
     "phases": [
@@ -214,7 +218,10 @@ Trả **cả cây** (document là 1 khối):
           { "key": "m1", "title": "Ngữ pháp", "order": 1, "category": "grammar",
             "lessons": [
               { "key": "l1", "title": "Bài 1", "order": 1, "theory": "# ...",
-                "videoUrl": "https://...", "audioUrl": "https://...",
+                "media": [
+                  { "type": "video", "url": "https://cdn/v1.mp4", "order": 1 },
+                  { "type": "audio", "url": "https://cdn/a1.mp3", "order": 2 }
+                ],
                 "exercises": [ { "type": "ipa", "refId": "L1", "order": 1 } ] }
             ] }
         ] }
@@ -245,13 +252,19 @@ DELETE /api/admin/course-imports/:id
 > 1 chưa có consumer (learner Phase 2) nên xoá cứng an toàn. **Đánh đổi:** Phase 2 (khi có consumer) nên cân nhắc
 > chuyển sang soft-delete + versioning + loại `slug` archived khỏi kiểm tra trùng.
 
+> **Guard Structure-Lock (feature-spec §5.3):** nếu khóa có `status='published'` → **từ chối** hard-delete với
+> `COURSE_LOCKED` (khóa đã publish + có thể có học viên enroll ⇒ chỉ soft-delete/vô hiệu hóa, không phá dữ liệu tiến
+> độ). Phase 1 chỉ tạo khóa `ready` nên guard **chưa kích hoạt** trong thực tế — đặt sẵn để hành vi đúng khi Phase 2
+> có trạng thái `published`. Xoá khóa `ready`/`draft`/`archived` vẫn hard-delete bình thường.
+
 ### Response — 200
 
 ```json
 { "data": { "id": "665f0a...", "deleted": true } }
 ```
 
-### Response — lỗi: 401 · 403 (thiếu `coursecontent:delete`/`manage`) · **404 `NOT_FOUND`**.
+### Response — lỗi: 401 · 403 (thiếu `coursecontent:delete`/`manage`) · **404 `NOT_FOUND`** · **409 `COURSE_LOCKED`**
+(khóa `published` — Structure-Lock, forward-compat).
 
 Audit: phát `admin.command.executed` (`coursecontent.delete`, target = id) qua factory hook.
 
@@ -268,7 +281,7 @@ Mỗi phần tử (FE render danh sách lỗi cụ thể — AC-5/IS-7):
 
 | Field | Kiểu | Ghi chú |
 |---|---|---|
-| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` |
+| `code` | String | `MISSING_LEVEL` / `ORPHAN_NODE` / `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE` / `UNSUPPORTED_MEDIA_TYPE` / `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` / `MEDIA_BASE64_BLOCKED` |
 | `message` | String | Mô tả tiếng Việt, kèm số dòng |
 | `row` | Number | Số dòng Excel để đội học thuật tự sửa |
 | `refType` / `refId` | String? | Chỉ có với lỗi tham chiếu (AC-3/AC-E6) |

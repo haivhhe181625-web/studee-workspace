@@ -5,8 +5,12 @@
 - **Tác giả:** Tech Lead Agent (AI) — chờ Technical Review (human Tech Lead)
 - **Trạng thái:** ✅ Đã duyệt Technical Review (2026-07-15), Q4 = phương án **(a)**. **Cập nhật mở rộng nội dung
   (Hướng B, 2026-07-15):** thêm ngữ nghĩa CEFR ở Chặng, phân loại ở Chuyên đề, và nội dung lý thuyết/video/audio ở
-  Bài học (IS-9, IS-10). `tasks.md` đã cập nhật theo. Mở rộng này KHÔNG đổi kiến trúc lõi (vẫn embedded-tree một
-  document, import qua admin-api) — chỉ thêm field + validate.
+  Bài học (IS-9, IS-10). **Cập nhật bao quát BR feature-spec (2026-07-16):** (1) Course thêm `thumbnail`; (2)
+  `status` mở đủ vòng đời `draft/ready/published/archived` (import vẫn tạo `ready`); (3) media Bài học chuyển sang
+  **danh sách** `media[]` (feature-spec `media_urls`) qua dòng Excel `MEDIA`; (4) **cấm Base64** media (§5.1);
+  (5) `DELETE` thêm guard **Structure-Lock** cho khóa `published` (§5.3, forward-compat). `data-model.md`,
+  `contracts/`, `acceptance.md`, `tasks.md` đã cập nhật theo. Mở rộng này KHÔNG đổi kiến trúc lõi (vẫn embedded-tree
+  một document, import qua admin-api) — chỉ thêm field + validate.
 - **ADR liên quan:** `docs/adr/0001-course-content-store-embedded-tree.md`
 
 ## 0. Bối cảnh đã kiểm chứng trong code (không đoán từ spec)
@@ -57,8 +61,9 @@ tắt (thành công) hoặc danh sách lỗi cụ thể trỏ đúng dòng Excel
 | Trùng khóa (Q4) | **Từ chối**; phát hiện trong pha validate, báo lỗi trỏ dòng; `slug` unique làm safety net | Đè rủi ro hỏng khóa active; versioning là over-engineering Phase 1 | Không cho re-import để sửa — phải xoá thủ công rồi import lại (chấp nhận Phase 1) |
 | Đa tenant (Q5) | **Platform dùng chung** `centerId: null`; quyền chỉ platform admin/đội học thuật | Lộ trình lõi B2C của platform; đơn giản hóa scope | Center chưa tự tạo khóa riêng (model chừa cột `centerId` để mở rộng) |
 | Kích thước / xử lý (Q6) | **Đồng bộ** trong request; file ≤ **5MB**, ≤ ~**5.000 bài học** | Vài giây/1 request; tránh Message Queue/Background phức tạp Phase 1 | Không hợp file rất lớn → đường mở BullMQ để sau |
-| Trạng thái sẵn sàng (IS-6) | Field `status: 'ready'` | Phase 2 phân biệt khóa import xong | Vì ghi 1 doc nguyên tử nên không có trạng thái "dở"; `status` mang tính quy ước forward-compat |
-| **Nội dung phong phú (IS-9, IS-10 — Hướng B)** | Thêm field: Chặng `cefrFrom/cefrTo/goalNote`; Chuyên đề `category`; Bài học `theory/videoUrl/audioUrl`. Media = **URL** (không upload/host). Bài học lý thuyết-thuần hợp lệ | Đúng tầm nhìn "mỗi tầng nâng trình độ, bài học đủ lý thuyết/video/âm thanh" ở chi phí thấp (chỉ thêm field + cột Excel, không cần engine mới) | Video/audio phụ thuộc content team tự host; Nghe/Đọc/Viết/Ngữ pháp/Từ vựng mới chỉ có **lý thuyết**, chưa có **bài tập tương tác** (cần engine — phase sau) |
+| Trạng thái & vòng đời (IS-6 + feature-spec §3 Tầng 1) | Field `status` enum `['draft','ready','published','archived']`, import tạo `'ready'` | Bao quát đủ vòng đời khóa (Draft→Ready→Published→Archived); Phase 2 phân biệt khóa import xong. BR "Ready cần ≥1 Chặng không rỗng" đảm bảo qua validate `EMPTY_CHILDREN` trước khi tạo `ready` | Phase 1 chỉ dùng `ready`; các phép chuyển trạng thái tường minh là Phase 2+ (chưa cài) |
+| **Nội dung phong phú (IS-9, IS-10 — Hướng B + BR feature-spec)** | Thêm field: Course `thumbnail`; Chặng `cefrFrom/cefrTo/goalNote`; Chuyên đề `category`; Bài học `theory` + **`media[]`** (danh sách link video/audio) + `exercises[]`. Media & thumbnail = **URL**, **cấm Base64** (§5.1). Bài học lý thuyết-thuần hợp lệ | Đúng tầm nhìn "mỗi tầng nâng trình độ, bài học đủ lý thuyết + nhiều video/âm thanh" ở chi phí thấp (thêm field + dòng `MEDIA`, không cần engine mới); `media[]` khớp `media_urls` của feature-spec (nhiều media/bài) | Media phụ thuộc content team tự host; Nghe/Đọc/Viết/Ngữ pháp/Từ vựng mới chỉ có **lý thuyết/media**, chưa có **bài tập tương tác** (cần engine — phase sau) |
+| **Structure-Lock (feature-spec §5.3)** | `DELETE` chặn khóa `status='published'` (`COURSE_LOCKED`) — guard forward-compat | Bảo vệ dữ liệu tiến độ khi Phase 2 có học viên enroll; Phase 1 chỉ tạo `ready` nên guard chưa kích hoạt nhưng đã "khóa" hành vi | Xoá khóa `ready` (chưa publish) vẫn hard-delete để re-import (Q4) |
 
 ## 3. Data model
 
@@ -72,41 +77,44 @@ Chi tiết đầy đủ ở `data-model.md`. Tóm tắt: 1 collection `course_st
 | `slug` | String (kebab-case) | ✓ | Định danh khóa (roadmap ID trong Excel), **unique** — khóa tự nhiên phát hiện trùng (Q4/AC-E5) |
 | `title` | String | ✓ | Tên Lộ trình |
 | `description` | String | | |
+| `thumbnail` | String (URL) | | **[MỚI]** ảnh cover (feature-spec §3 Tầng 1); URL `http(s)://`, cấm Base64 |
 | `centerId` | ObjectId → Center | | **Luôn `null` ở Phase 1** (Q5 — nội dung dùng chung). Cột giữ sẵn để mở rộng center-scoped sau |
-| `status` | String enum `['ready']` | ✓ | IS-6 — "sẵn sàng Phase 2" |
+| `status` | String enum `['draft','ready','published','archived']` | ✓ | **[MỞ RỘNG]** đủ vòng đời; import Phase 1 tạo `'ready'` (IS-6 "sẵn sàng Phase 2") |
 | `phases` | `[PhaseSchema]` | ✓ (≥1) | Chặng — nhúng |
 | `sourceMeta` | `{ filename, contentHash, nodeCount }` | | Metadata file `.xlsx` gốc (đối soát; `nodeCount` phục vụ ngưỡng an toàn) |
 | `importedBy` | ObjectId → User | ✓ | Người import (audit) |
 | `timestamps` | | auto | |
 
-Cây nhúng: `phases[].modules[].lessons[].exercises[]`. Xem `data-model.md` cho schema con + index.
+Cây nhúng: `phases[].modules[].lessons[].{media[],exercises[]}`. Xem `data-model.md` cho schema con (gồm
+`MediaRefSchema`) + index.
 
 ### 3.2 Parser Excel (`course-content.parser.js`)
 
 `parse(buffer) -> NormalizedCourse | ParseError` dùng **`exceljs`** (đọc `.xlsx` từ memory buffer). Cột `Level`
-(ROADMAP/PHASE/MODULE/LESSON/EXERCISE) dẫn dắt dựng cây từ các dòng liên tiếp. Trả về **IR**: cây object thuần,
-mỗi node đính **số dòng Excel** để lỗi trỏ đúng dòng (IS-7 — vd "Dòng 45"). Parser cô lập định dạng.
+(ROADMAP/PHASE/MODULE/LESSON/MEDIA/EXERCISE) dẫn dắt dựng cây từ các dòng liên tiếp. Trả về **IR**: cây object
+thuần, mỗi node đính **số dòng Excel** để lỗi trỏ đúng dòng (IS-7 — vd "Dòng 45"). Parser cô lập định dạng.
 
-**Cột file Excel Phase 1 (mở rộng Hướng B)** — mỗi dòng chỉ điền các ô liên quan tới `Level` của nó:
+**Cột file Excel Phase 1 (Hướng B + bao quát BR feature-spec)** — mỗi dòng chỉ điền các ô liên quan tới `Level`:
 
 | Cột | Header | Dùng cho Level | Ý nghĩa |
 |---|---|---|---|
-| A | `Level` | tất cả | ROADMAP/PHASE/MODULE/LESSON/EXERCISE |
+| A | `Level` | tất cả | ROADMAP/PHASE/MODULE/LESSON/**MEDIA**/EXERCISE |
 | B | `Key` | ROADMAP=`slug`, PHASE/MODULE/LESSON=`key` | định danh |
-| C | `Title` | trừ EXERCISE | tên tầng |
-| D | `Type` | EXERCISE | `ipa` / `talk` |
-| E | `RefId` | EXERCISE | mã bài tập (IPA `code` / talk scenario id) |
+| C | `Title` | ROADMAP/PHASE/MODULE/LESSON=tên tầng; MEDIA/EXERCISE=`label` (tuỳ chọn) | tên / nhãn |
+| D | `Type` | MEDIA=`video`/`audio`; EXERCISE=`ipa`/`talk` | loại media / bài tập |
+| E | `RefId` / `Url` | EXERCISE=mã bài tập (IPA `code` / talk scenario id); **MEDIA=URL video/audio** | tham chiếu / URL media |
 | F | `CefrFrom` | PHASE | trình độ bắt đầu (A1..C2) |
 | G | `CefrTo` | PHASE | trình độ đích |
 | H | `Category` | MODULE | grammar/pronunciation/vocabulary/listening/reading/writing/speaking/other |
 | I | `Content` | ROADMAP=`description`, LESSON=`theory` | mô tả / lý thuyết (markdown) |
-| J | `VideoUrl` | LESSON | link video (http/https) |
-| K | `AudioUrl` | LESSON | link audio (http/https) |
-| L | `Note` | PHASE=`goalNote` | vd "IELTS 5.0 → 6.0" |
+| J | `Thumbnail` | ROADMAP=`thumbnail` | **[MỚI]** URL ảnh cover (http/https) |
+| K | `Note` | PHASE=`goalNote` | vd "IELTS 5.0 → 6.0" |
 
-> Dòng `EXERCISE` mang **ID/mã bài tập tham chiếu** + `type` (khác luồng cũ tạo mới bài tập). Bài học có thể chỉ
-> điền lý thuyết/video/audio mà không có dòng EXERCISE nào (Bài học lý thuyết-thuần — hợp lệ). Chốt template `.xlsx`
-> với đội học thuật khi làm (tasks.md).
+> **Media dạng danh sách (`media_urls`):** mỗi Bài học có thể có **nhiều** dòng `MEDIA` (song song dòng `EXERCISE`) —
+> mỗi dòng 1 link video/audio, dựng thành `lesson.media[]`. `type ∈ {video, audio}`, URL ở cột `E`. Dòng `EXERCISE`
+> mang **ID/mã bài tập tham chiếu** + `type ∈ {ipa, talk}`. Bài học có thể chỉ điền lý thuyết + media mà không có
+> dòng EXERCISE (Bài học lý thuyết/media-thuần — hợp lệ). Media & `Thumbnail` chỉ nhận **URL** — **cấm Base64/`data:`**
+> (§5.1). Chốt template `.xlsx` với đội học thuật khi làm (tasks.md).
 
 ### 3.3 Reference resolver registry (`course-content.references.js`) — validate IS-4
 
@@ -133,8 +141,9 @@ exe-admin (trang Import) --(POST multipart/form-data, field `file` = .xlsx)--> P
   -> asyncHandler(action.handler):         // admin-api action — KHÔNG business logic
        delegate → courseContentService.importCourse({ buffer, user })
          1. parser.parse(buffer)                  → NormalizedCourse | throw ApiError(400, PARSE_FAILED)   [AC-E1]
-         2. validateStructure(course)             → gom lỗi: thiếu tầng/cha-con sai (AC-2), rỗng (AC-E2),
-                                                     trùng key nội bộ (AC-E3), type quiz (Q-Quiz)
+         2. validateCourse(course)                → gom lỗi: thiếu tầng/cha-con sai (AC-2), rỗng (AC-E2/AC-E8),
+                                                     trùng key nội bộ (AC-E3), CEFR/category/URL sai, media Base64,
+                                                     media type lạ (AC-E9)
          3. checkNotDuplicate(course.slug)        → nếu slug đã tồn tại trong DB → thêm lỗi ALREADY_EXISTS (Q4/AC-E5)
          4. references.resolveAll(course)         → gom exercise ID không tồn tại / chưa publish (AC-3, AC-E6)
          5. nếu CÓ bất kỳ lỗi (2–4): throw ApiError(400, IMPORT_VALIDATION_FAILED, { errors }) — KHÔNG ghi  [AC-4/IS-5]
@@ -198,8 +207,12 @@ phân biệt bằng `code` machine-readable + mảng `errors[]`.
 `errors[]` mỗi phần tử: `{ code, message, row, refId?, refType? }` — `row` là **số dòng Excel** để đội học thuật
 tự sửa (IS-7, vd "Dòng 45: Module 'mod-01' đã tồn tại"). `code` con: `MISSING_LEVEL` / `ORPHAN_NODE` /
 `DUPLICATE_KEY` / `ALREADY_EXISTS` / `REFERENCE_NOT_FOUND` / `REFERENCE_NOT_PUBLISHED` / `UNSUPPORTED_EXERCISE_TYPE`
-/ `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` (các code con này KHÔNG
-cần khai báo trong `error-codes.js` — chỉ top-level `IMPORT_VALIDATION_FAILED` là hằng).
+/ `UNSUPPORTED_MEDIA_TYPE` / `EMPTY_CHILDREN` / `EMPTY_LESSON` / `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL`
+/ `MEDIA_BASE64_BLOCKED` (các code con này KHÔNG cần khai báo trong `error-codes.js` — chỉ top-level
+`IMPORT_VALIDATION_FAILED` là hằng).
+
+**Structure-Lock (§5.3, endpoint `DELETE`):** nếu khóa có `status='published'` → **409** (hoặc 400 theo convention
+repo) `COURSE_LOCKED` — không hard-delete. Phase 1 chỉ tạo `ready` nên chưa kích hoạt; guard đặt sẵn cho Phase 2.
 
 ## 8. Bảo mật & quyền
 
@@ -272,8 +285,9 @@ Contract mới hoàn toàn, không breaking change.
 | **AC-3** Từ chối exercise ID không tồn tại, liệt kê đúng ID | §3.3 resolver; §4 bước 4+5; §7 `errors[]` refId/refType/row; §10 |
 | **AC-4** All-or-nothing | §2 validate-rồi-mới-ghi + single embedded doc; §4 bước 5; `research.md`; §10 đếm doc |
 | **AC-5** Hiển thị kết quả trên exe-admin | §6 `course-import/page.tsx` + service; `contracts/admin-course-import.md` |
-| **AC-6** Lưu CEFR (Chặng) + category (Chuyên đề) — IS-9 | §3.1 field mới; §3.2 cột F/G/H/L; validate `INVALID_CEFR`/`INVALID_CATEGORY` |
-| **AC-7** Lưu theory/video/audio + Bài học lý thuyết-thuần — IS-10 | §3.1 field mới; §3.2 cột I/J/K; ràng buộc `EMPTY_LESSON` (không bắt ≥1 exercise) |
+| **AC-6** Lưu CEFR (Chặng) + category (Chuyên đề) — IS-9 | §3.1 field mới; §3.2 cột F/G/H/K; validate `INVALID_CEFR`/`INVALID_CATEGORY` |
+| **AC-7** Lưu theory + `media[]` (danh sách) + Bài học lý thuyết-thuần — IS-10 | §3.1 `MediaRefSchema`; §3.2 cột I + dòng `MEDIA`; ràng buộc `EMPTY_LESSON` (không bắt ≥1 exercise) |
+| **AC-6b** Lưu `thumbnail` Course; `status` đủ vòng đời | §3.1 field mới; §3.2 cột J; import tạo `status='ready'` |
 | **AC-E1** File không parse được → lỗi rõ, không 500 | §3.2 `ParseError`; §7 `PARSE_FAILED`; §10 unit parser |
 | **AC-E2** File rỗng / không tầng nào | §7 `EMPTY_COURSE_FILE`; §4 bước 2; §10 |
 | **AC-E3** Trùng key nội bộ trong file | §3.2/§4 bước 2 `DUPLICATE_KEY`; §7; §10 |
@@ -281,8 +295,9 @@ Contract mới hoàn toàn, không breaking change.
 | **AC-E5** Import trùng khóa đã tồn tại (Q4) | §3.1 `slug` unique; §4 bước 3 + safety net bước 7; §7 `ALREADY_EXISTS`; §10 |
 | **AC-E6** Tham chiếu bài tập draft/archived (Q3) | §3.3 resolver IPA lọc `status:'published'`; §7 `REFERENCE_NOT_PUBLISHED`; §10 |
 | **AC-E7** Tham chiếu type `quiz` (hoãn Phase 2) | §3.3 `UNSUPPORTED_EXERCISE_TYPE`; enum model `[ipa,talk]` |
-| **AC-E8** Bài học rỗng hoàn toàn (IS-10) | §3.1 ràng buộc `EMPTY_LESSON` (≥1 trong theory/video/audio/exercise) |
-| **AC-E9** Metadata/URL sai (IS-9/IS-10) | validate `INVALID_CEFR`/`INVALID_CATEGORY`/`INVALID_URL` (§7) |
+| **AC-E8** Bài học rỗng hoàn toàn (IS-10) | §3.1 ràng buộc `EMPTY_LESSON` (≥1 trong theory/media/exercise) |
+| **AC-E9** Metadata/URL sai (IS-9/IS-10) | validate `INVALID_CEFR`/`INVALID_CATEGORY`/`INVALID_URL`/`MEDIA_BASE64_BLOCKED`/`UNSUPPORTED_MEDIA_TYPE` (§7) |
+| **AC-E10** Xoá khóa `published` bị chặn (§5.3 Structure-Lock) | §7 `COURSE_LOCKED` guard ở `DELETE` (forward-compat) |
 | **NFR Bảo mật** | §8 permission mới, platform-only, `centerId:null`, tenant từ server |
 | **NFR Audit** | §8 + §4 audit — factory tự phát `admin.command.executed` |
 | **NFR Hiệu năng** (Q6) | §4 đồng bộ; §8 giới hạn 5MB; §9 ngưỡng số node |

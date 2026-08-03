@@ -47,17 +47,23 @@
 - **When** user import
 - **Then** khóa lưu đúng các giá trị đó trên Chặng/Chuyên đề tương ứng (đọc lại document thấy `cefrFrom/cefrTo/goalNote` và `category` khớp file)
 
-### AC-7: Lưu nội dung học đa phương thức ở Bài học *(IS-10)* — **(Hướng B)**
+### AC-6b: Lưu `thumbnail` Course + `status` đủ vòng đời *(feature-spec §3 Tầng 1)*
 
-- **Given** một file hợp lệ mà một **Bài học** có `theory` (lý thuyết), `videoUrl`, `audioUrl`, và một Bài học khác **chỉ có lý thuyết** (không dòng EXERCISE nào)
+- **Given** một file hợp lệ mà **Lộ trình** có `thumbnail` (URL cover ở cột J)
 - **When** user import
-- **Then** cả hai Bài học được lưu; Bài học đầu giữ đúng `theory/videoUrl/audioUrl`; Bài học chỉ-lý-thuyết **được chấp nhận** (không bị coi là rỗng)
+- **Then** khóa lưu đúng `thumbnail`, và `status` = `"ready"` (import Phase 1 luôn tạo `ready` sau khi pass validate không-rỗng — BR "Ready cần ≥1 Chặng không rỗng"); model chấp nhận enum đủ `draft/ready/published/archived` cho vòng đời Phase 2+
+
+### AC-7: Lưu nội dung học đa phương thức ở Bài học *(IS-10)* — **(Hướng B + `media_urls`)**
+
+- **Given** một file hợp lệ mà một **Bài học** có `theory` (lý thuyết) + **nhiều dòng `MEDIA`** (vd 2 video + 1 audio), và một Bài học khác **chỉ có lý thuyết** (không dòng MEDIA/EXERCISE nào)
+- **When** user import
+- **Then** cả hai Bài học được lưu; Bài học đầu giữ đúng `theory` và `media[]` là **danh sách** đủ các link (đúng `type video/audio` + `url` + `order`); Bài học chỉ-lý-thuyết **được chấp nhận** (không bị coi là rỗng)
 
 ### AC-8: Tải template Excel *(§2 contract)* — **(Phase 1)**
 
 - **Given** một user có `coursecontent:read`
 - **When** gọi `GET /api/admin/course-imports/template`
-- **Then** nhận file `.xlsx` (Content-Type xlsx, có Content-Disposition attachment) gồm dòng header 12 cột + vài dòng ví dụ; user thiếu quyền → 403
+- **Then** nhận file `.xlsx` (Content-Type xlsx, có Content-Disposition attachment) gồm dòng header 11 cột (A Level … K Note) + vài dòng ví dụ (có `Thumbnail` + ≥1 dòng `MEDIA`); user thiếu quyền → 403
 
 ### AC-9: Liệt kê khóa đã import *(§3 contract)* — **(Phase 1)**
 
@@ -130,18 +136,26 @@
 
 ### AC-E8: Bài học rỗng hoàn toàn *(IS-10)* — **(Hướng B)**
 
-- **Given** một Bài học **không** có lý thuyết, **không** video, **không** audio, và **không** bài tập nào
+- **Given** một Bài học **không** có lý thuyết, **không** dòng MEDIA nào, và **không** bài tập nào
 - **When** user tải file lên
 - **Then** từ chối với `errors[]` kèm `EMPTY_LESSON` + số dòng; **không** tạo bản ghi nào. (Chỉ cần ≥1 trong
-  {lý thuyết, video, audio, bài tập} là hợp lệ.)
+  {lý thuyết, media, bài tập} là hợp lệ.)
 
-### AC-E9: Metadata / URL sai định dạng *(IS-9, IS-10)* — **(Hướng B)**
+### AC-E9: Metadata / URL / media sai định dạng *(IS-9, IS-10, §5.1)* — **(Hướng B + BR feature-spec)**
 
 - **Given** một file có `cefrFrom`/`cefrTo` ngoài enum CEFR (hoặc `cefrTo` < `cefrFrom`), hoặc `category` ngoài
-  danh mục, hoặc `videoUrl`/`audioUrl` không phải `http(s)://…`
+  danh mục, hoặc một `media`/`thumbnail` URL không phải `http(s)://…`, hoặc một `media` URL là **Base64/`data:`**,
+  hoặc một dòng `MEDIA` có `type` ngoài `{video, audio}`
 - **When** user tải file lên
-- **Then** từ chối với `errors[]` kèm `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` + số dòng; **không** tạo
-  bản ghi nào.
+- **Then** từ chối với `errors[]` kèm `INVALID_CEFR` / `INVALID_CATEGORY` / `INVALID_URL` / `MEDIA_BASE64_BLOCKED` /
+  `UNSUPPORTED_MEDIA_TYPE` + số dòng; **không** tạo bản ghi nào.
+
+### AC-E10: Chặn xoá khóa `published` *(§5.3 Structure-Lock — forward-compat)*
+
+- **Given** một khóa có `status='published'` (chỉ phát sinh ở Phase 2+; ở Phase 1 dùng để kiểm thử guard)
+- **When** user (dù đủ `coursecontent:delete/manage`) gọi `DELETE /api/admin/course-imports/:id`
+- **Then** hệ thống **từ chối** với `COURSE_LOCKED` (409) — không hard-delete; khóa `ready`/`draft`/`archived` thì
+  xoá bình thường. (Bảo vệ dữ liệu tiến độ học viên khi khóa đã publish.)
 
 ## Tiêu chí phi chức năng (nếu áp dụng)
 

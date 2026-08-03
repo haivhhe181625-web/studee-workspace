@@ -14,7 +14,7 @@ Thiết kế Phase 1 hiện tại đặt gánh nặng "đúng ngay từ đầu" 
 
 | Điểm đau | Hiện trạng trong code/design | Hệ quả với non-tech |
 |---|---|---|
-| **Khớp cột theo vị trí** | Parser đọc `cell(row, 1..12)` theo **thứ tự cột cố định** | Chèn/xóa/xê dịch 1 cột ⇒ toàn bộ file lệch, lỗi hàng loạt khó hiểu |
+| **Khớp cột theo vị trí** | Parser đọc `cell(row, 1..11)` (A Level … K Note) theo **thứ tự cột cố định** | Chèn/xóa/xê dịch 1 cột ⇒ toàn bộ file lệch, lỗi hàng loạt khó hiểu |
 | **Template tĩnh** | File mẫu chỉ có header + vài dòng ví dụ, **không ràng buộc giá trị** | Gõ sai CEFR (`a2`, `A2 `, `pre-A2`), sai category, sai Level ⇒ lỗi |
 | **Phải biết ID kỹ thuật** | Bài học trỏ tới `ipa`/`talk` bằng **ID hệ thống** | Đội tiếng Anh **không thể biết** ID này ở đâu ra |
 | **All-or-nothing + upload thẳng** | Có lỗi ⇒ từ chối cả lô, không có bước xem trước | Sửa mò nhiều vòng, nản, tốn thời gian |
@@ -32,10 +32,10 @@ Nâng cấp `GET /course-imports/template` (đang là file tĩnh) thành **workb
 
 1. **Sheet `Huong dan`** — giải thích 4 tầng, quy tắc thứ tự dòng cha–con, ví dụ 1 khóa mini hoàn chỉnh.
 2. **Sheet `Du lieu`** — vùng nhập chính, có **Excel Data Validation (dropdown)**:
-   - `Level` ∈ {ROADMAP, PHASE, MODULE, LESSON, EXERCISE}
+   - `Level` ∈ {ROADMAP, PHASE, MODULE, LESSON, MEDIA, EXERCISE}
    - `CefrFrom/CefrTo` ∈ {A1, A2, B1, B2, C1, C2}
    - `Category` ∈ {ngữ pháp, phát âm, từ vựng, nghe, đọc, viết, nói}
-   - `Type` (bài tập) ∈ {ipa, talk} *(Phase 4 nới thêm)*
+   - `Type` (MEDIA) ∈ {video, audio}; `Type` (EXERCISE) ∈ {ipa, talk} *(Phase 4 nới thêm)*
    - Ô sai dropdown bị Excel chặn ngay khi gõ ⇒ lỗi không kịp sinh ra.
 3. **Sheet `Danh muc bai tap`** *(xem Tuyến C)* — danh sách ID `ipa`/`talk` có sẵn để copy.
 4. Dòng ví dụ mẫu + comment trên từng cột header.
