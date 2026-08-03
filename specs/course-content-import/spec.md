@@ -43,7 +43,9 @@ Cho phép đội ngũ học thuật/Admin tải lên một file cấu trúc khó
 - **IS-7** — Phản hồi kết quả: khi thành công báo tóm tắt (số Chặng/Chuyên đề/Bài học đã tạo); khi thất bại trả **danh sách lỗi cụ thể** (chỉ rõ dòng/mục/trường nào sai và sai gì) đủ để đội học thuật tự sửa file.
 - **IS-8** — Phân quyền: chỉ user có quyền quản trị nội dung phù hợp mới thực hiện được Import.
 - **IS-9** *(bổ sung — Hướng B, 2026-07-15)* — **Ngữ nghĩa nâng cấp trình độ:** mỗi **Chặng** lưu được nấc tiến bộ (CEFR `cefrFrom`→`cefrTo`, vd A2→B1, hoặc `goalNote` tự do như "IELTS 5.0→6.0"); mỗi **Chuyên đề** lưu được **phân loại** (ngữ pháp/phát âm/từ vựng/nghe/đọc/viết/nói). Hệ thống validate các giá trị này.
-- **IS-10** *(bổ sung — Hướng B, 2026-07-15)* — **Nội dung học đa phương thức ở Bài học:** mỗi **Bài học** lưu được **lý thuyết** (text/markdown), **link video**, **link audio** (dạng URL — đội học thuật tự host, hệ thống KHÔNG upload/host media). Bài học chỉ-lý-thuyết (không bài tập) là hợp lệ. Bài tập tích hợp Phase 1 vẫn chỉ gồm `ipa` + `talk`.
+- **IS-10** *(bổ sung — Hướng B, cập nhật 2026-07-16 theo BR feature-spec)* — **Nội dung học đa phương thức ở Bài học:** mỗi **Bài học** lưu được **lý thuyết** (`content_theory`, text/markdown) và một **danh sách media** (`media_urls` → `media[]`) gồm **nhiều** link video/audio bổ trợ (dạng URL — đội học thuật tự host, hệ thống KHÔNG upload/host media). Bài học chỉ-lý-thuyết (không media/bài tập) là hợp lệ. Bài tập tích hợp Phase 1 vẫn chỉ gồm `ipa` + `talk`.
+- **IS-11** *(bổ sung — bao quát BR feature-spec §3 Tầng 1, 2026-07-16)* — **Định danh & vòng đời Lộ trình:** mỗi **Lộ trình** lưu được `thumbnail/cover` (URL ảnh đại diện) và `status` theo đủ vòng đời **Draft/Ready/Published/Archived** (import Phase 1 tạo `Ready` sau khi pass ràng buộc "≥1 Chặng không rỗng").
+- **IS-12** *(bổ sung — bao quát BR feature-spec §5.1, 2026-07-16)* — **Chặn media Base64:** hệ thống **cấm** nhúng media (ảnh/video/audio) dạng Base64/`data:` thẳng vào DB; mọi `media[].url` và `thumbnail` phải là URL `http(s)://` (CDN/YouTube/R2). Giữ document nhẹ, tránh trần 16MB.
 
 ### Ngoài phạm vi
 
