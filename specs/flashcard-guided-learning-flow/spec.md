@@ -72,6 +72,8 @@ Frontend:
 - [ ] **Học từ mới**: bấm vào phiên Lật thẻ; nhãn "{newRemaining} từ". Control **"Từ mới/lượt"** (5/10/20) chỉ đặt cỡ lô, KHÔNG trừ theo ngày.
 - [ ] **Lật thẻ** 3 nút: Chưa thuộc(again) / Đã nhớ(good) / Quá dễ(easy). Dùng cho cả Học mới lẫn Ôn đến hạn (`practice=false`).
 - [ ] **Kiểm tra / Luyện tập**: mở thẳng ModePicker trên thẻ **đã học** (loại `state='new'`; gồm cả ⭐), `practice=true` → leo nấc màu. KHÔNG đi vòng qua màn "thẻ đến hạn". `StudyRunnerContainer` bị xóa.
+- [ ] Cuối phiên Kiểm tra (Ghép/Trắc nghiệm/Gõ): tổng kết hiện **danh sách từ sai** + nút **"Làm lại N thẻ sai"** → chạy lại chỉ thẻ sai (không cả bộ), lặp tới khi hết sai.
+- [ ] Chip tiến độ ở màn Kiểm tra: hover/**bấm** → xổ panel thẻ **chưa đúng** ở cách đó (`progress.pending[mode]`); bấm 1 từ / "Luyện N thẻ" → chạy đúng thẻ đó ở cách tương ứng. Cách xong hết → chip có ✓. StudyMenu/danh sách bộ giữ chip tĩnh.
 - [ ] Thanh (độ sâu) **mỗi nấc 1 đoạn màu** (vàng/teal/xanh lá/tím); phần `slipping` của nấc **tô sọc chồng lên cùng màu** (không rời đoạn). Chip (hoạt động) = `activity` (số thẻ TỪNG làm đúng mỗi mode, tích lũy — KHÔNG về 0 khi leo nấc) + "Đang tụt" (`slipping`) + **⭐ Đã nhớ** (`mastered`); "còn X từ mới · Y thẻ đến hạn ôn".
 - [ ] Khi review trả `crossedMastery=true` → hiện chúc mừng "🎉 Đã nhớ từ '…'". Nấc 4 chỉ khác màu, không hiệu ứng.
 - [ ] Gỡ funnel `GuidedStudyRunner`/`buildGuidedPlan`; test 4 runner cũ vẫn xanh.

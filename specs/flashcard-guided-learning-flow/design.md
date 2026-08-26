@@ -86,8 +86,12 @@ Thẻ `new` (chưa introduce) nằm ngoài thanh (track trống).
       activity: {               // HOẠT ĐỘNG tích lũy: số thẻ TỪNG làm đúng mỗi mode (từ review log) — dùng cho CHIP
         flip: number, match: number, quiz: number, type: number,
       },
+      pending: {                // cardId thẻ ĐÃ HỌC (reps≥1) CHƯA làm đúng ở mỗi cách = learned − correct(mode)
+        flip: string[], match: string[], quiz: string[], type: string[],
+      },
       // Bất biến: Σ levels[k].total == introduced; Σ levels[k].slipping == slipping.
       // `activity` ĐỘC LẬP levels: thẻ leo nấc vẫn giữ nguyên activity của mode cũ (không về 0).
+      // `pending` để "luyện chỗ yếu": FE resolve cardId→thẻ (từ getDue extra), chip xổ panel bấm luyện.
     }
   }
 }
@@ -124,6 +128,8 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 - **new-limit = cỡ lô/lượt**: `newRemaining = min(newLimit, số thẻ 'new')`. KHÔNG trừ số đã học trong ngày ("20 luôn là 20"). Nhãn control: **"Từ mới/lượt"**.
 - **Giữ hồn lật thẻ:** Học mới & Ôn đến hạn = lật + tự chấm 3 mức. "Kiểm tra / Luyện tập" cho chọn cả **Lật (học lại)** một thẻ đã học bất kỳ (chưa due) — chỗ duy nhất ôn lại thẻ chưa tới hạn.
 - **Kiểm tra lấy thẻ:** `getDue(deckId, extra:true)` rồi PracticeRunner **lọc bỏ `state='new'`** = chỉ thẻ **ĐÃ HỌC** (reps≥1), gồm cả ⭐. ⚠️ Bắt buộc lọc: `getDue(extra)` trả MỌI SRS row của bộ, mà `initSrsForCards` gán mọi card 1 row `state='new'` từ đầu → không lọc thì Kiểm tra hỏi cả từ chưa từng thấy. Mở thẳng ModePicker (KHÔNG đi vòng qua màn "thẻ đến hạn").
+- **Làm lại thẻ sai (Kiểm tra):** cuối phiên Ghép/Trắc nghiệm/Gõ, `SessionSummaryView` hiện **danh sách từ sai** + nút **"Làm lại N thẻ sai"** → `PracticeRunner` chạy lại phiên với ĐÚNG thẻ sai (không cả bộ), lặp tới khi hết sai. `StudySessionRunner` gom cardId trả sai (`wrongIdsRef`); Ghép: 1 lần vấp = tính sai thẻ đó.
+- **Luyện chỗ yếu qua chip (Kiểm tra):** chip trên `DeckProgressBar` (khi có `pendingByMode`+`onPractice`) thành nút — hover/bấm xổ panel **thẻ chưa đúng** ở cách đó (`progress.pending[mode]` resolve từ `getDue extra`). Bấm 1 từ → luyện riêng từ đó; "Luyện N thẻ" → luyện cả nhóm ở cách tương ứng (`PracticeRunner.startPractice` = setRetryCards+setMode, tái dùng cơ chế retry). Cách nào xong hết → chip có ✓. Chỉ **Ghép/Trắc nghiệm/Tự luận** drill được; **Lật để tĩnh** (ở Kiểm tra Lật = ôn nhẹ/browse, không chấm → "chưa đúng" không luyện-xoá được). Chỉ bật ở màn Kiểm tra; StudyMenu/danh sách bộ giữ chip tĩnh.
 - **Xóa `StudyRunnerContainer`**: nhánh Kiểm tra/Luyện tập gộp vào `StudyMenu` (ModePicker + StudySessionRunner practice), bỏ màn due-first thừa (đã trùng "Ôn đến hạn").
 - Dùng lại 4 runner + ModePicker + StudySessionRunner + SessionSummaryView; menu chỉ quyết THẺ + MODE + cờ practice, mỗi lượt vẫn `POST /cards/:id/review`.
 - **Gỡ** `GuidedStudyRunner`/`buildGuidedPlan`/`GuidedTurnRunner`/`GuidedSessionSummary`/`IntroduceCard` (funnel cũ, đã gỡ).
