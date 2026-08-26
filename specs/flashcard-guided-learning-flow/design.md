@@ -82,8 +82,12 @@ Thẻ `new` (chưa introduce) nằm ngoài thanh (track trống).
         type:  { total: number, slipping: number },
       },
       slipping: number,         // tổng thẻ đã học tới/quá hạn (due≤now) — cho chip "Đang tụt"
-      mastered: number          // thẻ isMastered (stability≥21) — đếm ⭐, TRỤC RIÊNG (chồng lên màu)
-      // Bất biến: Σ levels[k].total == introduced; Σ levels[k].slipping == slipping
+      mastered: number,         // thẻ isMastered (stability≥21) — đếm ⭐, TRỤC RIÊNG (chồng lên màu)
+      activity: {               // HOẠT ĐỘNG tích lũy: số thẻ TỪNG làm đúng mỗi mode (từ review log) — dùng cho CHIP
+        flip: number, match: number, quiz: number, type: number,
+      },
+      // Bất biến: Σ levels[k].total == introduced; Σ levels[k].slipping == slipping.
+      // `activity` ĐỘC LẬP levels: thẻ leo nấc vẫn giữ nguyên activity của mode cũ (không về 0).
     }
   }
 }
@@ -125,9 +129,9 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 - **Gỡ** `GuidedStudyRunner`/`buildGuidedPlan`/`GuidedTurnRunner`/`GuidedSessionSummary`/`IntroduceCard` (funnel cũ, đã gỡ).
 
 ## 4. UI thanh tiến độ (per-bộ)
-- **Thanh** = mỗi nấc 1 đoạn màu §1.1; phần `slipping` của nấc **tô sọc chéo chồng lên cùng màu** (KHÔNG tách đoạn xám riêng); phần còn lại (total−introduced) = track trống. Chip 4 nấc dùng `total`.
+- **Thanh (độ sâu)** = mỗi nấc 1 đoạn màu §1.1 theo `levels[k].total`; phần `slipping` của nấc **tô sọc chéo chồng lên cùng màu** (KHÔNG tách đoạn xám riêng); phần còn lại (total−introduced) = track trống.
 - Màu: vàng · xanh mờ (giữa vàng-xanh) · xanh lá đậm · tím/xanh dương (nấc 4 có nhũ/hiệu ứng nhẹ — tùy, không bắt buộc). Xanh lá CHỈ hiện khi có thẻ thật ở nấc 3 → hết cảnh "xanh mà chưa thành thạo".
-- **Chip** 4 nấc (Lật n · Ghép n · Trắc nghiệm n · Tự luận n) + "Đang tụt n" + **⭐ Đã nhớ n** (`progress.mastered`).
+- **Chip (hoạt động)** = `progress.activity`: Lật/Ghép/Trắc nghiệm/Tự luận = số thẻ TỪNG làm đúng mỗi mode (tích lũy, **KHÔNG về 0 khi thẻ leo nấc** — khác thanh độ sâu) + "Đang tụt n" (`slipping`) + **⭐ Đã nhớ n** (`mastered`). Chip đo "đã luyện gì", thanh đo "đang nhớ sâu tới đâu".
 - **Chúc mừng**: khi review trả `crossedMastery=true` → toast "🎉 Đã nhớ từ '…'!" (§1.5). Nấc 4 chỉ khác màu, KHÔNG hiệu ứng (KISS).
 - Dòng mục tiêu: "còn X từ mới · Y thẻ đến hạn ôn hôm nay".
 - Token màu: `app-amber` (vàng), `app-green` (xanh lá) đã có; **nấc 2** dùng biến pha giữa amber-green, **nấc 4** cần token mới (tím/xanh dương) — thêm 1 token `app-violet` (hoặc dùng `app-accent` nếu là xanh dương). Chốt token ở stream FE, không hex trực tiếp.
