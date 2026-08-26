@@ -119,7 +119,7 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 - **Menu 3 hành động**, người học tự chọn. "Học từ mới" bấm vào là vào phiên (nút chính = Bắt đầu); new-limit (5/10/20) chỉ đặt cỡ lô.
 - **new-limit = cỡ lô/lượt**: `newRemaining = min(newLimit, số thẻ 'new')`. KHÔNG trừ số đã học trong ngày ("20 luôn là 20"). Nhãn control: **"Từ mới/lượt"**.
 - **Giữ hồn lật thẻ:** Học mới & Ôn đến hạn = lật + tự chấm 3 mức. "Kiểm tra / Luyện tập" cho chọn cả **Lật (học lại)** một thẻ đã học bất kỳ (chưa due) — chỗ duy nhất ôn lại thẻ chưa tới hạn.
-- **Kiểm tra lấy thẻ:** `getDue(deckId, extra:true)` = toàn bộ thẻ đã học **chưa ⭐**, trộn ngẫu nhiên. Mở **thẳng ModePicker** (KHÔNG đi vòng qua màn "thẻ đến hạn").
+- **Kiểm tra lấy thẻ:** `getDue(deckId, extra:true)` rồi PracticeRunner **lọc bỏ `state='new'`** = chỉ thẻ **ĐÃ HỌC** (reps≥1), gồm cả ⭐. ⚠️ Bắt buộc lọc: `getDue(extra)` trả MỌI SRS row của bộ, mà `initSrsForCards` gán mọi card 1 row `state='new'` từ đầu → không lọc thì Kiểm tra hỏi cả từ chưa từng thấy. Mở thẳng ModePicker (KHÔNG đi vòng qua màn "thẻ đến hạn").
 - **Xóa `StudyRunnerContainer`**: nhánh Kiểm tra/Luyện tập gộp vào `StudyMenu` (ModePicker + StudySessionRunner practice), bỏ màn due-first thừa (đã trùng "Ôn đến hạn").
 - Dùng lại 4 runner + ModePicker + StudySessionRunner + SessionSummaryView; menu chỉ quyết THẺ + MODE + cờ practice, mỗi lượt vẫn `POST /cards/:id/review`.
 - **Gỡ** `GuidedStudyRunner`/`buildGuidedPlan`/`GuidedTurnRunner`/`GuidedSessionSummary`/`IntroduceCard` (funnel cũ, đã gỡ).

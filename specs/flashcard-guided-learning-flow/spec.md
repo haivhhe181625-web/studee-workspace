@@ -32,7 +32,7 @@ Feature này = **menu chọn cách học + thang màu theo năng lực**:
 ### Trang bộ thẻ = menu 4 hành động (KHÔNG ép chuỗi)
 1. **Học từ mới** (≤ newLimit thẻ 'new', cỡ lô/lượt — KHÔNG trừ theo ngày): **Lật thẻ** 3 nút (Chưa thuộc/Đã nhớ/Quá dễ) → review đầu (`practice=false`); "Quá dễ" (easy) → nấc 3 + stability nhảy cao.
 2. **Ôn đến hạn**: thẻ `due` — Lật thẻ nhắc lại (`practice=false`) → **lấp tụt** (làm mới `due`); quên → reset nấc 1.
-3. **Kiểm tra / Luyện tập**: toàn bộ thẻ đã học **chưa ⭐** (`getDue extra`, trộn) → ModePicker chọn **Lật(học lại)/Ghép/Trắc nghiệm/Tự luận** → **leo nấc màu** (`practice=true`, KHÔNG đụng lịch/XP). Lật ở đây = ôn lại thẻ chưa tới hạn.
+3. **Kiểm tra / Luyện tập**: thẻ **đã học** (`getDue extra` lọc bỏ `state='new'`, gồm cả ⭐, trộn) → ModePicker chọn **Lật(học lại)/Ghép/Trắc nghiệm/Tự luận** → **leo nấc màu** (`practice=true`, KHÔNG đụng lịch/XP). Lật ở đây = ôn lại thẻ chưa tới hạn.
 
 ### Tụt & lấp
 - **Đến hạn** (`due ≤ now`) → thẻ giữ nấc màu, **tô sọc chồng lên** cùng màu (nhị phân, không rời đoạn, không mờ opacity). Nhờ vậy Kiểm tra leo nấc vẫn thấy đổi màu dù thẻ đang tụt.
@@ -71,7 +71,7 @@ Frontend:
 - [ ] `/flashcards/[deckId]/study` = **menu 3 hành động**: Học từ mới · Ôn đến hạn · Kiểm tra / Luyện tập — user tự chọn, KHÔNG ép chuỗi.
 - [ ] **Học từ mới**: bấm vào phiên Lật thẻ; nhãn "{newRemaining} từ". Control **"Từ mới/lượt"** (5/10/20) chỉ đặt cỡ lô, KHÔNG trừ theo ngày.
 - [ ] **Lật thẻ** 3 nút: Chưa thuộc(again) / Đã nhớ(good) / Quá dễ(easy). Dùng cho cả Học mới lẫn Ôn đến hạn (`practice=false`).
-- [ ] **Kiểm tra / Luyện tập**: mở thẳng ModePicker (Lật/Ghép/Trắc nghiệm/Tự luận) trên toàn bộ thẻ đã học chưa ⭐ (trộn), `practice=true` → leo nấc màu. KHÔNG đi vòng qua màn "thẻ đến hạn". `StudyRunnerContainer` bị xóa.
+- [ ] **Kiểm tra / Luyện tập**: mở thẳng ModePicker trên thẻ **đã học** (loại `state='new'`; gồm cả ⭐), `practice=true` → leo nấc màu. KHÔNG đi vòng qua màn "thẻ đến hạn". `StudyRunnerContainer` bị xóa.
 - [ ] Thanh per-bộ **mỗi nấc 1 đoạn màu** (vàng/teal/xanh lá/tím); phần `slipping` của nấc **tô sọc chồng lên cùng màu** (không rời đoạn); chip 4 nấc dùng `total` + "Đang tụt" + **⭐ Đã nhớ** (`mastered`); "còn X từ mới · Y thẻ đến hạn ôn".
 - [ ] Khi review trả `crossedMastery=true` → hiện chúc mừng "🎉 Đã nhớ từ '…'". Nấc 4 chỉ khác màu, không hiệu ứng.
 - [ ] Gỡ funnel `GuidedStudyRunner`/`buildGuidedPlan`; test 4 runner cũ vẫn xanh.
@@ -83,7 +83,7 @@ Frontend:
 - **Đến hạn thì tụt** = sọc chồng lên màu nấc (nhị phân theo `due`, giữ nấc, không mờ dần); **ôn thì hết sọc**. Lapse → về nấc 1.
 - **Ôn = làm mới** (hết tụt); **Kiểm tra = leo nấc** (không đụng lịch). Đi theo ngày VN.
 - **⭐ "Đã nhớ" = `isMastered` (stability≥21)** — trục riêng chồng lên màu + chúc mừng khi vượt mốc. Sai sau ⭐ → xây lại nhanh theo FSRS (không code thêm).
-- **Kiểm tra** lấy toàn bộ thẻ đã học, trộn ngẫu nhiên; nấc 4 chỉ khác màu (KISS).
+- **Kiểm tra** lấy thẻ đã học (loại `state='new'`, gồm cả ⭐), trộn ngẫu nhiên; nấc 4 chỉ khác màu (KISS).
 - new-limit = **cỡ lô/lượt** (mặc định 10, 5/10/20), lưu `studyPlan.flashcardNewPerDay` qua `PATCH /users/me`; `newRemaining=min(newLimit, thẻ 'new')`, KHÔNG trừ theo ngày. Nhãn "Từ mới/lượt".
 - Practice/Kiểm tra KHÔNG cộng XP/quest/streak.
 
