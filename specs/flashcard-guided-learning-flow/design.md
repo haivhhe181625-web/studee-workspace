@@ -17,7 +17,7 @@ khó nhất từng làm đúng; thời gian làm màu tụt; ôn làm mới**. G
 - **Không ép chuỗi.** Trang bộ thẻ là **menu 3 hành động**: Học từ mới · Ôn đến hạn · Kiểm tra / Luyện tập.
 - **Ba trục tách biệt** cho mỗi thẻ:
   - **Nấc màu** = năng lực đã chứng minh (lật<ghép<trắc nghiệm<tự luận). Chỉ LÊN khi trả lời đúng mode khó hơn.
-  - **Tụt** = đến hạn (`due≤now`) → thẻ rời đoạn màu sang đoạn "đang tụt" kẻ sọc (nhị phân, KHÔNG mờ dần).
+  - **Tụt** = đến hạn (`due≤now`) → thẻ GIỮ nấc màu, tô **sọc chéo chồng lên** cùng màu (không rời đoạn, không mờ dần).
   - **⭐ Đã nhớ** = mastered ≥21 ngày (isMastered), trục riêng chồng lên màu.
 - **Phân vai rõ:** *Ôn đến hạn* = nhắc lại → **lấp tụt** (làm mới `due`). *Kiểm tra* = làm bài khó hơn → **leo nấc màu**. Đúng lời PO: "ôn lại chỉ là nhắc lại; làm bài để lên trình".
 - **new-limit = cỡ lô mỗi LƯỢT** (không phải hạn mức/ngày): "20 luôn là 20 từ mới sẵn sàng", KHÔNG trừ số đã học trong ngày. Hàng đợi due theo ngày VN.
@@ -46,15 +46,15 @@ Trả **sai** → không nâng.
 - **Lapse** (chỉ khi `practice=false` và rating='again'/quên → FSRS chuyển `relearning`): **reset `bestRecallLevel=1`** (về vàng — chốt của PO). Sai khi `practice=true` (đang Kiểm tra) KHÔNG reset.
 
 ### 1.3 Tụt (do đến hạn) — tính lúc đọc, KHÔNG lưu
-Nhị phân theo FSRS `due` so với `now`. **KHÔNG mờ dần opacity** — đến hạn là **tụt hẳn** ra đoạn "đang tụt" (kẻ sọc):
-- `due > now` (chưa tới hạn) → **đứng** ở đoạn màu nấc của nó.
-- `due ≤ now` (tới/quá hạn) → **tụt**: rời đoạn màu, gộp vào đoạn "đang tụt" (kẻ sọc) — chờ ôn lấp.
+Nhị phân theo FSRS `due` so với `now`. Đến hạn **KHÔNG rời đoạn màu** — thẻ giữ nguyên nấc màu, chỉ được **tô sọc chéo chồng lên** cùng màu. Nhờ vậy leo nấc ở Kiểm tra thấy màu đổi ngay dù thẻ vẫn đang tụt (tránh cảnh "ghép xong không thấy gì" khi cả bộ đang tới hạn):
+- `due > now` (chưa tới hạn) → đoạn màu nấc **đặc**.
+- `due ≤ now` (tới/quá hạn) → đoạn màu nấc **có sọc chồng lên** (`slipping` của chính nấc đó).
 Thẻ `new` (chưa introduce) nằm ngoài thanh (track trống).
-- **Ôn lấp:** chỉ lượt đẩy FSRS (`practice=false`: introduce, Ôn đến hạn) mới đẩy `due` ra tương lai → thẻ rời "đang tụt", về lại đoạn màu nấc. Kiểm tra/Luyện tập (`practice=true`) leo màu nhưng KHÔNG lấp tụt (vẫn ở "đang tụt" tới khi ôn thật) — nhất quán "ôn mới là làm mới".
+- **Ôn lấp:** chỉ lượt đẩy FSRS (`practice=false`: introduce, Ôn đến hạn) mới đẩy `due` ra tương lai → **hết sọc**. Kiểm tra/Luyện tập (`practice=true`) leo màu (đổi nấc) nhưng KHÔNG bỏ sọc (vẫn tụt tới khi ôn thật) — nhất quán "ôn mới là làm mới".
 
 ### 1.4 Vòng đời (từ SRS có sẵn, không đổi state machine FSRS)
 `new (0)` --Lật "Đã nhớ"--> `learning, nấc 1` --Kiểm tra/ôn mode khó--> nấc 2/3/4
---đến hạn--> tụt (đoạn kẻ sọc) --Ôn đến hạn đúng--> về đoạn màu --Ôn quên (lapse)--> `relearning, nấc 1`.
+--đến hạn--> tụt (sọc chồng lên màu) --Ôn đến hạn đúng--> hết sọc --Ôn quên (lapse)--> `relearning, nấc 1`.
 
 ### 1.5 Huy hiệu ⭐ "Đã nhớ" (≥21 ngày) — trục riêng, chồng lên màu
 - **⭐ = `isMastered` = `state='review' && stability≥21`** (dùng nguyên `flashcard-scheduler.service.js`, KHÔNG field/ngưỡng mới). Đây là **trục thứ 3**, độc lập với nấc màu: đo "nhớ bền qua thời gian", không phải "làm được bài gì".
@@ -75,10 +75,15 @@ Thẻ `new` (chưa introduce) nằm ngoài thanh (track trống).
     progress: {                 // thanh thang màu — §1
       total: number,
       introduced: number,       // reps≥1, clamp ≤ total (thẻ đã học); track trống = total - introduced
-      levels: { flip: number, match: number, quiz: number, type: number }, // đếm theo bestRecallLevel, CHỈ thẻ chưa tụt (due>now)
-      slipping: number,         // thẻ đã học đã tới/quá hạn (due≤now) — đoạn "đang tụt" (kẻ sọc)
-      mastered: number          // thẻ isMastered (stability≥21) — đếm ⭐, TRỤC RIÊNG (chồng lên màu, không nằm trong tổng levels)
-      // Bất biến: flip+match+quiz+type + slipping == introduced (mastered đếm chéo, không cộng vào)
+      levels: {                 // mỗi nấc: total (GỒM cả thẻ đang tụt) + slipping (số đang tụt của nấc → vẽ sọc)
+        flip:  { total: number, slipping: number },
+        match: { total: number, slipping: number },
+        quiz:  { total: number, slipping: number },
+        type:  { total: number, slipping: number },
+      },
+      slipping: number,         // tổng thẻ đã học tới/quá hạn (due≤now) — cho chip "Đang tụt"
+      mastered: number          // thẻ isMastered (stability≥21) — đếm ⭐, TRỤC RIÊNG (chồng lên màu)
+      // Bất biến: Σ levels[k].total == introduced; Σ levels[k].slipping == slipping
     }
   }
 }
@@ -120,7 +125,7 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 - **Gỡ** `GuidedStudyRunner`/`buildGuidedPlan`/`GuidedTurnRunner`/`GuidedSessionSummary`/`IntroduceCard` (funnel cũ, đã gỡ).
 
 ## 4. UI thanh tiến độ (per-bộ)
-- **Thanh nhiều đoạn** = `levels` (flip/match/quiz/type) tô 4 màu §1.1 + đoạn **"đang tụt"** (`slipping`) tô **kẻ sọc** (KHÔNG mờ dần); phần còn lại (total−introduced) = track trống.
+- **Thanh** = mỗi nấc 1 đoạn màu §1.1; phần `slipping` của nấc **tô sọc chéo chồng lên cùng màu** (KHÔNG tách đoạn xám riêng); phần còn lại (total−introduced) = track trống. Chip 4 nấc dùng `total`.
 - Màu: vàng · xanh mờ (giữa vàng-xanh) · xanh lá đậm · tím/xanh dương (nấc 4 có nhũ/hiệu ứng nhẹ — tùy, không bắt buộc). Xanh lá CHỈ hiện khi có thẻ thật ở nấc 3 → hết cảnh "xanh mà chưa thành thạo".
 - **Chip** 4 nấc (Lật n · Ghép n · Trắc nghiệm n · Tự luận n) + "Đang tụt n" + **⭐ Đã nhớ n** (`progress.mastered`).
 - **Chúc mừng**: khi review trả `crossedMastery=true` → toast "🎉 Đã nhớ từ '…'!" (§1.5). Nấc 4 chỉ khác màu, KHÔNG hiệu ứng (KISS).
@@ -143,7 +148,7 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 ## 6. Rủi ro
 - **Không bơm khống FSRS**: `bestRecallLevel` là trục riêng; practice=true chỉ leo màu, KHÔNG advance stability/đổi `due`. Chỉ introduce + Ôn đến hạn = practice=false.
 - **Lapse reset về nấc 1**: chỉ áp khi practice=false & FSRS thật sự lapse (relearning). Kiểm tra sai không phạt.
-- **Tụt phụ thuộc `due`**: nhị phân `due≤now` → tụt (kẻ sọc), KHÔNG mờ dần opacity; chưa introduce thì bỏ qua.
+- **Tụt phụ thuộc `due`**: nhị phân `due≤now` → sọc chồng lên màu nấc (không rời đoạn, không mờ opacity); chưa introduce thì bỏ qua.
 - **Token màu nấc 2/4**: không hex trực tiếp — thêm biến vào theme (stream FE).
 - **Gỡ funnel**: xóa 4 file guided + test tương ứng; đảm bảo 4 runner .test cũ vẫn xanh (chỉ bọc ngoài).
 - **studyPlan null/strict · counts→levels · vnDayKey**: như §1-§2.
@@ -152,7 +157,7 @@ Trang `/flashcards/[deckId]/study` = **StudyMenu** (không còn orchestrator ép
 - Menu chọn cách học (Lật/Ghép/Kiểm tra/Luyện tự do) — KHÔNG funnel ép.
 - Lật 3 mức: Chưa thuộc / Đã nhớ / Quá dễ(→easy, nhảy nấc 3).
 - Màu = nấc năng lực: Lật vàng · Ghép xanh mờ · Trắc nghiệm xanh lá · Tự luận tím.
-- Tụt theo lịch `due`: chưa tới hạn = đứng · đến hạn = **tụt hẳn ra đoạn kẻ sọc** (KHÔNG mờ dần). Lapse → về nấc 1.
+- Tụt theo lịch `due`: chưa tới hạn = màu đặc · đến hạn = **sọc chồng lên màu nấc** (giữ nấc, không mờ dần). Lapse → về nấc 1.
 - Ôn = làm mới (hết mờ); Kiểm tra = leo nấc. Đi theo ngày VN.
 - new-limit: chọn rồi bấm Bắt đầu.
 
