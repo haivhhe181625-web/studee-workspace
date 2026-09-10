@@ -8,6 +8,7 @@ mới: `docs/adr/NNNN-<slug-ngắn>.md`.
 |---|---|---|---|
 | — | [Migrate admin từ AdminJS sang admin REST + portal exe-admin](<API_REPO>/docs/ADR-admin-api-migration.md) | Chấp nhận | 2026-07-03 |
 | 0001 | [Lưu cấu trúc khóa học tĩnh thành embedded-tree document (module course-content)](0001-course-content-store-embedded-tree.md) | Đề xuất | 2026-07-15 |
+| 0002 | [Thêm hạ tầng thoại realtime (LiveKit + mô hình giọng nói) cho mode Trò chuyện trực tiếp](0002-realtime-voice-livekit-gemini.md) | Đề xuất | 2026-09-10 |
 
 > ⚠️ Link ở bảng trên dùng placeholder `<API_REPO>` (xem `docs/cross-repo-linking.md`) — **không phải link bấm
 > được**, vì từ ngày 2026-07-14 file này nằm ở repo `exe-api`, khác repo với `docs/adr/` (nay ở `studee-workspace`).
