@@ -97,9 +97,12 @@ Full table: `<API_REPO>/docs/api/CONVENTIONS.md` §Naming (this section of that 
 ## 6. Branch conventions
 
 3-branch flow: `main` (prod, tech-lead-only merges) / `develop` (integration, PR-only) /
-`feature/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*` (dev pushes directly). Conventional Commits
-(`feat|fix|chore|docs|refactor|test(<scope>): <desc>`). PR base is always `develop`, never `main` — a GitHub
-Action auto-closes non-lead PRs targeting `main`. Full rules: `<API_REPO>/docs/CONVENTIONS.md`.
+`feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*` (dev pushes directly), named
+`<type>/<TASK-CODE>-<short-desc>` (e.g. `feat/PRD-95-rate-limiting`). Conventional Commits with the Plane task code
+right after `: ` (`feat(listening): PRD-95 <desc>`); the PR title matches the commit. The task code only needs to
+appear in one of branch / commit / PR title — that is what moves the Plane task to In Review (PR opened) and
+Testing (merged); never set it to Done by hand. PR base is always `develop`, never `main` — a GitHub Action
+auto-closes non-lead PRs targeting `main`. Full rules: `<API_REPO>/docs/CONVENTIONS.md`.
 
 ## 7. Review policy
 

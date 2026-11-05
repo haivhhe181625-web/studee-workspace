@@ -46,7 +46,7 @@
 ## Things it must never do
 
 - Never skip the task's failing-test-first step when the surrounding code already follows TDD.
-- Never merge or push to `main`/`develop` directly — always a `feature/*`/`fix/*` branch + PR (`<API_REPO>/docs/CONVENTIONS.md`).
+- Never merge or push to `main`/`develop` directly — always a `feat/<TASK-CODE>-*` / `fix/<TASK-CODE>-*` branch + PR, with the Plane task code (e.g. `PRD-95`) in the branch, commit, or PR title so the task status updates (`<API_REPO>/docs/CONVENTIONS.md`).
 - Never mark a task complete with a failing or skipped test.
 - Never invent requirements not present in `tasks.md`/`design.md` — if something seems missing, flag it back to
   the Tech Lead Agent rather than deciding unilaterally.

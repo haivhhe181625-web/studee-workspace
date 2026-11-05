@@ -98,11 +98,13 @@ thật sự chặn merge. Chi tiết: `.ai/workflows/review-workflow.md`.
 |---|---|---|
 | `main` | Production | Chỉ Tech Lead merge |
 | `develop` | Tích hợp | **Chỉ qua PR** |
-| `feature/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*` | Nhánh làm việc | Dev push thẳng |
+| `feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*` | Nhánh làm việc, đặt tên `<loại>/<MÃ-TASK>-<mô-tả>` (vd `feat/PRD-95-rate-limiting`) | Dev push thẳng |
 
 - **PR base LUÔN là `develop`, không bao giờ `main`.** Một GitHub Action tự đóng PR nhắm vào `main` nếu không
   phải Tech Lead. Đây là quy tắc cứng — đừng bao giờ vượt qua.
-- **Commit theo Conventional Commits:** `feat|fix|chore|docs|refactor|test(<scope>): <mô tả>`.
+- **Commit theo Conventional Commits, mã task Plane ngay sau `: `:** `feat(listening): PRD-95 <mô tả>`. Tiêu đề PR
+  viết y như commit. Mã task chỉ cần có ở một trong ba chỗ (nhánh / commit / tiêu đề PR) — Plane tự chuyển task
+  sang **In Review** khi mở PR và **Testing** khi merge. Không tự set **Done**.
 - Commit `git add <file cụ thể>`, **không** `git add .`. **Không** thêm `Co-Authored-By` hay attribution AI
   (quy tắc cứng, `<API_REPO>/CLAUDE.md`).
 
@@ -110,7 +112,7 @@ thật sự chặn merge. Chi tiết: `.ai/workflows/review-workflow.md`.
 
 ```
 Issue (feature-request / bug-report)
-   → nhánh feature/<slug> từ develop
+   → nhánh feat/PRD-XXX-<slug> từ develop
    → commit theo task
    → mở PR base=develop
    → AI Self Review (Reviewer Agent) — phải sạch lỗi blocking
